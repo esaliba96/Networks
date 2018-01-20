@@ -25,6 +25,7 @@ int main(int argc, char **argv) {
          break;
       }
    }
+   pcap_close(ret);  
    return 0;
 }
 
@@ -252,6 +253,6 @@ int tcp_checksum(struct tcp_header *tcp, struct ip_header *ip) {
 
    memcpy((char*)cksum_buf + sizeof(struct tcp_pseudo_header), tcp, tcp_len);
    int checksum = in_cksum(cksum_buf, tcp_header_len);
-   
+
    return checksum;
 }
