@@ -190,16 +190,16 @@ void parse_input() {
 void parse_message(char* input) {
 	int input_len = strlen(input);
 	char *index = input;
- 	char *handle;
+ 	char handle[100];
 
 	while(!isspace(*index))
 	 	index++;
 
 	ssize_t handle_len = index - input;
-	printf("%d\n", handle_len);
-	handle = malloc(handle_len);
+	//printf("%d\n", handle_len);
+	//handle = malloc(handle_len);
 	memcpy(handle, input, handle_len);
-
+	handle[handle_len] = '\0';
 	while(isspace(*index))
 		index++;
 
