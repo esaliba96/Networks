@@ -51,5 +51,6 @@ void server_run();
 int read_socket(int);
 void parse_input();
 void parse_message(char* input);
+void send_msg(char* handle, char* msg);
 
 #endif

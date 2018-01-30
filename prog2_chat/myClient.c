@@ -214,28 +214,39 @@ void parse_input() {
 }
 
 void parse_message(char* input) {
-	const char s[2] = " ";
-//   char *index = input;
-   char *token;
-   int handle_nbr, count;
-   handle_nbr = count = 0;
+	int input_len = strlen(input);
+	char *index = input;
+ 	char handle[100];
 
-   token = strtok(input, s);
-   /* walk through other tokens */
-   while (token != NULL) {
-   	if(atoi(token) < 9 && atoi(token) > 1) {
-   		handle_nbr = atoi(token);
-   		printf("nbr: %d\n", handle_nbr);
-   	}
-   	else
-      printf("%s\n", token);
-      token = strtok(NULL, s);
-   }
+	while(!isspace(*index))
+	 	index++;
 
-   // while(!isspace(*index)) {
-   // 	printf("a");
-   // 	//index++;
-   // 	*handle++ = *index++;
-   // }
-   // printf("%s\n", handle);
+	ssize_t handle_len = index - input;
+	printf("%d\n", handle_len);
+	memcpy(handle, input, handle_len);
+
+	while(isspace(*index))
+		index++;
+
+	char *msg;
+	ssize_t msg_len;
+	if ((index - input) >= input_len) {
+		msg = "\n";
+		msg_len = 1;
+	} else {
+		msg = index;
+		msg_len = strlen(msg);
+	}
+
+	if (msg_len > 1400) {
+		fprintf(stderr, "ERROR: Message exceeds maximum allowed length\n");
+		return;
+	}
+	printf("%s\n", handle);
+	printf("%s\n", msg);
+	send_msg(handle, msg);
+}
+
+void send_msg(char* handle, char* msg) {
+	
 }
