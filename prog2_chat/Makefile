@@ -12,18 +12,18 @@ ifeq ("$(ARCH)", "i686")
 	FILE = 32
 endif
 
-all:  $(FILE) myClient$(FILE) myServer$(FILE)
+all:  $(FILE) cclient$(FILE) server$(FILE)
 
 32: 
 	# to make life easier - automatically deletes .o's that were most likely created on a 64 bit machine
 	# assumes you are doing most of your development on 64 bit machines
 	rm -f *.o
 	
-myClient$(FILE): myClient.c networks.o gethostbyname6.o client.o
-	$(CC) $(CFLAGS) -o myClient$(FILE) myClient.c networks.o gethostbyname6.o client.o $(LIBS)
+cclient$(FILE): myClient.c networks.o gethostbyname6.o client.o
+	$(CC) $(CFLAGS) -o cclient$(FILE) myClient.c networks.o gethostbyname6.o client.o $(LIBS)
 
-myServer$(FILE): myServer.c networks.o gethostbyname6.o client.o
-	$(CC) $(CFLAGS) -o myServer$(FILE) myServer.c networks.o gethostbyname6.o client.o$(LIBS)
+server$(FILE): myServer.c networks.o gethostbyname6.o client.o
+	$(CC) $(CFLAGS) -o server$(FILE) myServer.c networks.o gethostbyname6.o client.o$(LIBS)
 
 .c.o:
 	gcc -c $(CFLAGS) $< -o $@ $(LIBS)
@@ -32,7 +32,7 @@ cleano:
 	rm -f *.o
 
 clean:
-	rm -f myServer myClient myServer32 myClient32 *.o
+	rm -f server cclient server32 cclient32 *.o
 
 
 

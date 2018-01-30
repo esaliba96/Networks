@@ -44,13 +44,14 @@ void check_active(fd_set *fdvar);
 void send_wait_for_recv(uint8_t* sent_packet, ssize_t sent_packet_len, uint8_t** rec_packet, ssize_t* rec_packet_len);
 uint8_t* make_packet_client(uint8_t flag, uint8_t *data, ssize_t data_len);
 void client_requests(struct client* c);
-void register_handle(struct client *c);
+void add_user(struct client *c);
 void respond_to_client(struct client *c, int, uint8_t* , ssize_t);
 uint8_t* make_packet_server(struct chat_header response, uint8_t* data, ssize_t data_len);
 void server_run();
 int read_socket(int);
 void parse_input();
 void parse_message(char* input);
-void send_msg(char* handle, char* msg);
+void send_msg(uint8_t nbr_dest, char* dest, uint8_t dest_len, char* msg);
+void send_it(struct client *c);
 
 #endif

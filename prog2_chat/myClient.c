@@ -46,28 +46,6 @@ int main(int argc, char * argv[]) {
 	return 0;
 }
 
-void sendToServer(int socketNum) {
-	char sendBuf[MAXBUF];   //data buffer
-	int sendLen = 0;        //amount of data to send
-	int sent = 0;            //actual amount of data sent/* get the data and send it   */
-			
-	printf("Enter the data to send: ");
-	scanf("%" xstr(MAXBUF) "[^\n]%*[^\n]", sendBuf);
-	
-	sendLen = strlen(sendBuf) + 1;
-	printf("read: %s len: %d\n", sendBuf, sendLen);
-		
-	sent =  send(socketNum, sendBuf, sendLen, 0);
-	if (sent < 0)
-	{
-		perror("send call");
-		exit(-1);
-	}
-
-	printf("String sent: %s \n", sendBuf);
-	printf("Amount of data sent is: %d\n", sent);
-}
-
 void checkArgs(int argc, char * argv[]) {
 	/* check command line arguments  */
 	if (argc != 3)
@@ -88,14 +66,13 @@ void add_handle() {
 
 	ssize_t recv_len;
 	struct chat_header *recv;
-	printf("packet_len: %d\n", sent_packet_len);
+	//printf("packet_len: %d\n", sent_packet_len);
 
 	send_wait_for_recv(sent_packet, sent_packet_len, (uint8_t**)&recv, &recv_len);
 
 	if (recv) {
 		switch(recv->flag) {
 			case 2:
-				printf("hello world\n");
 				break;
 			case 3:
 				fprintf(stderr, "Handle already in use: %s\n", g->handle);
@@ -120,7 +97,7 @@ void send_wait_for_recv(uint8_t* sent_packet, ssize_t sent_packet_len, uint8_t**
 		return;
 	} 
 	printf("Amount of data sent is: %d\n", sent_packet_len);
-	printf("soc %d\n", g->socket);
+	
 	static struct timeval timeout;
 	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
@@ -137,7 +114,6 @@ void send_wait_for_recv(uint8_t* sent_packet, ssize_t sent_packet_len, uint8_t**
 				perror("recv failed");
 				return;
 			}				
-			printf("rec bytes: %d\n", num_bytes);
 			*rec_packet = (uint8_t*)recv_buf;
 			*rec_packet_len = num_bytes;
 		}
@@ -158,8 +134,6 @@ uint8_t* make_packet_client(uint8_t flag, uint8_t *data, ssize_t data_len) {
 
 	memcpy(packet + sizeof(struct chat_header), data, data_len);
 	
-	printf("flag: %d\n", chat_h->flag);
-
 	return packet;
 }
 
@@ -208,21 +182,22 @@ void parse_input() {
 		return;
 	}
 	if(strncmp(input, "%m", 2) == 0 || strncmp(input, "%M", 2) == 0) {
-		printf("we out her\n");
-		parse_message(input+3);
+		//printf("we out her\n");
+		parse_message(input + 3);
 	}
 }
 
 void parse_message(char* input) {
 	int input_len = strlen(input);
 	char *index = input;
- 	char handle[100];
+ 	char *handle;
 
 	while(!isspace(*index))
 	 	index++;
 
 	ssize_t handle_len = index - input;
 	printf("%d\n", handle_len);
+	handle = malloc(handle_len);
 	memcpy(handle, input, handle_len);
 
 	while(isspace(*index))
@@ -242,11 +217,59 @@ void parse_message(char* input) {
 		fprintf(stderr, "ERROR: Message exceeds maximum allowed length\n");
 		return;
 	}
-	printf("%s\n", handle);
-	printf("%s\n", msg);
-	send_msg(handle, msg);
+	//printf("%s\n", handle);
+	//printf("%s\n", msg);
+	send_msg(1, handle, handle_len, msg);
 }
 
-void send_msg(char* handle, char* msg) {
-	
+void send_msg(uint8_t nbr_dest, char* dest, uint8_t dest_len, char* msg) {
+	uint8_t from_c_len = strlen(g->handle);	
+	ssize_t data_len = 3 + dest_len + from_c_len + strlen(msg);
+	uint8_t* data = malloc(data_len);
+	ssize_t index = 0;
+
+	if (strcmp(dest, g->handle) == 0) {
+		printf("%s: %s", dest, msg);
+	}
+
+	memcpy(data, &from_c_len, sizeof(from_c_len));
+	index += sizeof(from_c_len);
+	memcpy(data + index, g->handle, from_c_len);
+	index += from_c_len;
+	memcpy(data +index, &dest_len, sizeof(dest_len));
+	index += sizeof(dest_len);
+	memcpy(data + index, dest, dest_len);
+	index += dest_len;
+	memcpy(data + index, msg, strlen(msg) + 1);
+
+	uint8_t* sent_packet = make_packet_client(5, data, data_len);
+	ssize_t sent_packet_len = sizeof(struct chat_header) + data_len;
+
+	ssize_t recv_len;
+	struct chat_header *recv;
+	printf("packet_len: %d\n", sent_packet_len);
+
+	send_wait_for_recv(sent_packet, sent_packet_len, (uint8_t**)&recv, &recv_len);
+
+	char *fail;
+	uint8_t fail_len;
+
+	if(recv) {
+		switch(recv->flag) {
+			case 7:
+				fail_len = *((uint8_t *)recv + sizeof(struct chat_header));
+				memcpy(fail, ((uint8_t *)recv + sizeof(struct chat_header)), fail_len);
+				//badHandle[badHandleLen] = '\0';
+				fprintf(stderr, "Client with handle %s does not exist.\n", fail);
+				break;
+			default:
+				fprintf(stderr, "ERROR: Unexpected header flag (%d)\n", recv->flag);
+				exit(1);
+				break;
+		}
+		free(recv);
+	}
+	free(sent_packet);
+	free(data);
 }
+
