@@ -124,7 +124,7 @@ void client_requests(struct client* c) {
 	uint8_t* buf = malloc(2048);
 	//printf("%d\n", c->socket);
 	if ((rec_buf = recv(c->socket, buf, 2048-1, 0)) < 0) {
-		perror("handle_client:recv");
+		perror("client_requests");
 		free(buf);
 		return;
 	}

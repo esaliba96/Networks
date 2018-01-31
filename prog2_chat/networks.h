@@ -57,5 +57,7 @@ void send_client_list(struct client *c);
 void list();
 void exit_user();
 void exit_response(struct client*);
+void block_user(char*);
+void print_blocked();
 
 #endif

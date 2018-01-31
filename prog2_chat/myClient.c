@@ -14,7 +14,8 @@ void checkArgs(int argc, char * argv[]);
 
 struct client_info {
 	int socket;
-	char handle[100];
+	char handle[101];
+	struct blocked *b;
 };
 
 struct client_info *g;
@@ -22,6 +23,7 @@ struct client_info *g;
 int main(int argc, char * argv[]) {
 	int socketNum = 0;         //socket descriptor
 	g = malloc(sizeof(struct client_info));
+	g->b = (struct blocked*)malloc(100 * sizeof(struct blocked));
 
 	if(argc != 4) {
 		fprintf(stderr, "Usage: ./myClient <handle_name> <server_name> <server_port>\n");
@@ -38,7 +40,8 @@ int main(int argc, char * argv[]) {
 	g->socket = tcpClientSetup(argv[2], argv[3], DEBUG_FLAG);
 	//fprintf(stdout, "%s\n", g->handle);
 	add_handle();
-	server_run();
+	server_run(); 
+	free(g->b);
 	//sendToServer(socketNum);
 	
 	close(socketNum);
@@ -225,18 +228,40 @@ void parse_input() {
 		exit_user();
 	}
 	if(strncmp(input, "%B", 2) == 0 || strncmp(input, "%b", 2) == 0) {
-		//block_user(input + 3);
+		block_user(input + 3);
 	}
 
 }
 
-// void block_user(char* handle) {
-// 	if(!handle) {
-// 		print_blocked(g);
-// 	} else {
-// 		add_handle();
-// 	}
-// }
+void block_user(char* handle) {
+	int i = 0;
+	char *name = handle;
+	name[strlen(handle) - 1] = '\0';
+	//printf("hadnle: %s", name);
+	if(!handle) {
+		print_blocked(g);
+	} else {
+		while(g->b[i].name) {
+			i++;
+		}
+		//memcpy(g->b[i].name, name, strlen(name));
+		g->b[i].name = name;
+		printf("hi: %s\n", g->b[i].name);
+		print_blocked();
+	}
+}
+
+void print_blocked() {
+	int i = 0;
+	printf("Blocked:");
+	printf("aure: %s\n", g->b[0].name);
+	while(g->b[i - 1].name) {
+		printf(" %s,", g->b[i].name);
+		i++;	
+	}
+	printf(" %s\n", g->b[i].name);
+	//printf("%s\n", g->b[0]);
+}
 
 void exit_user() {
 	uint8_t* packet = make_packet_client(8, NULL, 0);

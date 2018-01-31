@@ -7,9 +7,14 @@
 #include <unistd.h>
 #include <string.h>
 
+
+struct blocked {
+	char *name;
+};
+
 struct client {
 	int socket;
-	char* handle;
+	char *handle;
 	struct client* next;
 	struct chat_header *packet;
 	ssize_t packet_len;	
