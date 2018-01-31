@@ -53,5 +53,9 @@ void parse_input();
 void parse_message(char* input);
 void send_msg(uint8_t nbr_dest, char* dest, uint8_t dest_len, char* msg);
 void send_it(struct client *c);
+void send_client_list(struct client *c);
+void list();
+void exit_user();
+void exit_response(struct client*);
 
 #endif

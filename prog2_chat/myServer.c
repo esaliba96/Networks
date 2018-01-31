@@ -21,7 +21,7 @@
 #include "networks.h"
 
 #define MAXBUF 1024
-#define DEBUG_FLAG 1
+#define DEBUG_FLAG 0
 
 void recvFromClient(int clientSocket);
 int checkArgs(int argc, char *argv[]);
@@ -130,7 +130,7 @@ void client_requests(struct client* c) {
 	}
 
 	if(rec_buf == 0) {
-		printf("nothing boi\n");
+		//printf("nothing boi\n");
 		remove_client(c);
 	} else {
 		c->packet_len = rec_buf;
@@ -145,9 +145,25 @@ void client_requests(struct client* c) {
 			case 5:
 				//printf("we messaging\n");
 				send_it(c);
+			case 10:
+				send_client_list(c);
+				break;
+			case 8:
+				exit_response(c);
 				break;
 		}
 	}
+}
+
+
+void exit_response(struct client *c) {
+	respond_to_client(c, 9, NULL, 0);
+	remove_client(c);
+}
+
+void send_client_list(struct client *c) {
+	uint32_t num_clients = client_nbr();
+	respond_to_client(c, 11, (uint8_t*)&num_clients, sizeof(uint32_t));
 }
 
 void add_user(struct client *c) {
@@ -204,15 +220,15 @@ void send_it(struct client* c) {
 	buf += sizeof(struct chat_header) + 1 + sender_len;
 	dest_handle_len = *buf;
 	char dest[dest_handle_len];
-	memcpy(dest, buf+1, dest_handle_len);
-
+	memcpy(dest, buf+1, (ssize_t)dest_handle_len);
+	dest[dest_handle_len] = '\0';
+	//printf("dest1: %d\n", dest_handle_len);
+	//printf("dest: %s\n", dest);
 	struct client* dest_c = find(dest);
 	uint8_t* fail = malloc((ssize_t)dest_handle_len);
 	memcpy(fail, &dest_handle_len, sizeof(dest_handle_len));
-	memcpy(fail, buf+1, dest_handle_len);
+	memcpy(fail + sizeof(dest_handle_len), buf+1, dest_handle_len);
 	ssize_t fail_len = dest_handle_len + 1;
-	printf("bu: %s\n", fail);
-	printf("%d\n", fail_len);
 	if(dest_c == NULL) {
 		respond_to_client(c, 7, fail, fail_len);
 		return;
