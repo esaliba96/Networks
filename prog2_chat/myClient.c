@@ -233,6 +233,8 @@ void parse_input() {
 void block_user(char* handle) {
 	if(!handle) {
 		print_blocked(g);
+	} else {
+		add_handle()
 	}
 }
 
