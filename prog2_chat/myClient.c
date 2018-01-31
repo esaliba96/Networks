@@ -225,18 +225,18 @@ void parse_input() {
 		exit_user();
 	}
 	if(strncmp(input, "%B", 2) == 0 || strncmp(input, "%b", 2) == 0) {
-		block_user(input + 3);
+		//block_user(input + 3);
 	}
 
 }
 
-void block_user(char* handle) {
-	if(!handle) {
-		print_blocked(g);
-	} else {
-		add_handle()
-	}
-}
+// void block_user(char* handle) {
+// 	if(!handle) {
+// 		print_blocked(g);
+// 	} else {
+// 		add_handle();
+// 	}
+// }
 
 void exit_user() {
 	uint8_t* packet = make_packet_client(8, NULL, 0);
