@@ -24,6 +24,10 @@ int main(int argc, char * argv[]) {
 	int socketNum = 0;         //socket descriptor
 	g = malloc(sizeof(struct client_info));
 	g->b = (struct blocked*)malloc(100 * sizeof(struct blocked));
+	//memset(g->b, 0, sizeof(uint8_t) * 101 * 100);
+	for (size_t i = 0 ; i < 100 ; i++) {
+        g->b[i].name = NULL;
+   }
 
 	if(argc != 4) {
 		fprintf(stderr, "Usage: ./myClient <handle_name> <server_name> <server_port>\n");
@@ -187,7 +191,20 @@ int read_socket(int sk) {
 		exit(1);
 	}
 
+	//printf("%d\n", numBytes);
 	uint8_t* buf = (uint8_t*)rec;
+	uint8_t handle_len;
+	char name[101] = {0};
+	if(rec->flag == 12) {
+		handle_len = *(buf + sizeof(struct chat_header));
+		memcpy(name, buf + sizeof(struct chat_header) + 1, handle_len);
+		//printf("bitchess\n");
+		//printf("%d\n", handle_len);
+		name[handle_len] = '\0';
+		printf("   %s\n", name);
+		return 1;
+	}
+
 	uint8_t sender_len = *(buf+ sizeof(struct chat_header));
 	uint8_t dest_handle_len;
 	
@@ -197,15 +214,12 @@ int read_socket(int sk) {
 	sender[sender_len] = '\0';
 	buf += 1 + sender_len;
 	dest_handle_len = *buf;
-	//printf("dest: %d\n", (ssize_t)dest_handle_len);
-	// printf("dest: %s\n", dest);
-	// struct client* dest_c = find(dest);
-	// uint8_t* fail = malloc((ssize_t)dest_handle_len);
-	// memcpy(fail, &dest_handle_len, sizeof(dest_handle_len));
-	// memcpy(fail + sizeof(dest_handle_len), buf+1, dest_handle_len);
-	// ssize_t fail_len = dest_handle_len + 1;
 
-	printf("\n%s: %s", sender, buf + 1 + (ssize_t)dest_handle_len);
+	if(is_blocked(sender)) {
+		return 0;
+	} else {
+		printf("\n%s: %s", sender, buf + 1 + (ssize_t)dest_handle_len);
+	}
 	printf("$: ");
 	fflush(stdout);
 	free(rec);
@@ -230,38 +244,71 @@ void parse_input() {
 	if(strncmp(input, "%B", 2) == 0 || strncmp(input, "%b", 2) == 0) {
 		block_user(input + 3);
 	}
-
+	if(strncmp(input, "%u", 2) == 0 || strncmp(input, "%U", 2) == 0) {
+		unblock_user(input + 3);
+	}
 }
 
-void block_user(char* handle) {
+int block_user(char* handle) {
 	int i = 0;
-	printf("%d\n", strlen(handle));
 	char *name = strdup(handle);
-	//name[(int)strlen(name)-1] = '\0';
-	printf("hadnle: %s", name);
+	int len = strlen(handle);
+	name[len-1] = '\0';
 	if(!handle) {
 		print_blocked(g);
 	} else {
-		while(g->b[i].name == 0) {
+		while(g->b[i].name) {
+			if(strcmp(name, g->b[i].name) == 0) {
+				printf("Block failed, handle %s is already blocked.\n", name);
+				return 0;	
+			}
 			i++;
-	}
-	memcpy(g->b[i].name, name, strlen(name) - 1);
-		//g->b[i].name = name;
-		printf("hi: %s\n", g->b[i].name);
+		}
+		g->b[i].name = name;
 		print_blocked();
 	}
+	return 1;
 }
 
 void print_blocked() {
 	int i = 0;
-//	printf("Blocked:");
-	//printf("aure: %s\n", g->b[0].name);
-	while(strlen(g->b[i].name) > 1) {
+	printf("Blocked:");
+	while(g->b[i].name) {
 		printf(" %s,", g->b[i].name);
 		i++;	
 	}
-	printf(" %s\n", g->b[i].name);
-	//printf("%s\n", g->b[0]);
+	printf("\n");
+}
+
+int is_blocked(char* name) {
+	int i = 0;
+	while(g->b[i].name) {
+		if(strcmp(name, g->b[i].name) == 0) {
+			return 1;
+		}
+		i++;
+	}
+	return 0;
+}
+
+int unblock_user(char* handle) {
+	int i = 0;
+	char *name = strdup(handle);
+	int len = strlen(handle);
+	name[len-1] = '\0';
+	if(!is_blocked(name)) {
+		printf("Unblock failed, handle %s is not blocked.\n", name);
+		return 0;	
+	} else {
+		printf("%d\n", strlen(g->b));
+		while(strcmp(name, g->b[i].name) != 0) {
+			i++;
+		}
+		while(g->b[i].name) {
+			g->b[i].name = g->b[i + 1].name;
+		}
+	}
+	return 1;
 }
 
 void exit_user() {
@@ -283,23 +330,19 @@ void list() {
 	ssize_t rec_len;
 	struct chat_header* rec;
 	struct chat_header* rec1;
-
+	int i = 0;
+	uint32_t count;
 	send_wait_for_recv(packet, packet_len, (uint8_t**)&rec, &rec_len);
 
 	if(rec->flag == 11) {
 		uint8_t *data = (uint8_t *)rec;
-		uint32_t count = *(uint32_t *)(data + sizeof(struct chat_header));
+		count = *(uint32_t *)(data + sizeof(struct chat_header));
 		count = ntohl(count);
 		printf("Number of clients: %d\n", count);
 	}
 
-	if(recv(g->socket, (uint8_t *)rec1, 2400, 0) < 0) {
-		exit(1);
-	}
-	if(rec1->flag == 12) {
-		uint8_t *data = (uint8_t*)rec1;
-		printf("%s\n", data + sizeof(struct chat_header) + 1);
-		//recv(g->socket, (uint8_t *)rec1, 2400, 0);
+	for(i; i < count; i++) {
+		read_socket(g->socket);
 	}
 }
 

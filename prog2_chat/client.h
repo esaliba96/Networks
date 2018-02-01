@@ -9,7 +9,7 @@
 
 
 struct blocked {
-	uint8_t name[101];
+	uint8_t *name;
 };
 
 struct client {

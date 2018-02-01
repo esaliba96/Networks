@@ -58,19 +58,6 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-// void recvFromClient(int clientSocket) {
-// 	char buf[MAXBUF];
-// 	int messageLen = 0;
-	
-// 	//now get the data from the client_socket
-// 	if ((messageLen = recv(clientSocket, buf, MAXBUF, 0)) < 0) {
-// 		perror("recv call");
-// 		exit(-1);
-// 	}
-
-// 	printf("Message received, length: %d Data: %s\n", messageLen, buf);
-// }
-
 int checkArgs(int argc, char *argv[]) {
 	int portNumber = 0;
 
@@ -136,7 +123,7 @@ void client_requests(struct client* c) {
 		c->packet_len = rec_buf;
 		c->packet = (struct chat_header*) buf;
 
-		//printf("rec: %d\n", c->packet->flag);
+		printf("rec: %d\n", c->packet->flag);
 		//printf("name: %d\n", ntohl(c->packet->size));
 		switch(c->packet->flag) {
 			case 1:
@@ -145,6 +132,7 @@ void client_requests(struct client* c) {
 			case 5:
 				//printf("we messaging\n");
 				send_it(c);
+				break;
 			case 10:
 				send_client_list(c);
 				break;
@@ -167,13 +155,18 @@ void send_client_list(struct client *c) {
 	int i = 0;
 	struct client *curr;
 	curr = clients->head;
-	char data[102];
+	uint8_t data[102];
 	uint8_t len;
-	for(i; i < num_clients; i++) {
+	ssize_t count = (ntohl(num_clients));
+	printf("%d\n", count);
+	for(i; i < count; i++) {
+		printf("%d\n", i);
 		len = strlen(curr->handle);
-		memcpy(data, &len, 1);
-		memcpy(data+1, curr->handle, strlen(curr->handle));
-		respond_to_client(c, 12, (uint8_t*)&data, sizeof(uint32_t));
+		memcpy(data, &len, sizeof(len));
+		//printf("%s\n", curr->handle);
+		memcpy(data+sizeof(len), curr->handle, len);
+		respond_to_client(c, 12, (uint8_t*)&data, len + sizeof(len));
+		curr = curr->next;
 	}
 }
 
