@@ -235,17 +235,18 @@ void parse_input() {
 
 void block_user(char* handle) {
 	int i = 0;
-	char *name = handle;
-	name[strlen(handle) - 1] = '\0';
-	//printf("hadnle: %s", name);
+	printf("%d\n", strlen(handle));
+	char *name = strdup(handle);
+	//name[(int)strlen(name)-1] = '\0';
+	printf("hadnle: %s", name);
 	if(!handle) {
 		print_blocked(g);
 	} else {
-		while(g->b[i].name) {
+		while(g->b[i].name == 0) {
 			i++;
-		}
-		//memcpy(g->b[i].name, name, strlen(name));
-		g->b[i].name = name;
+	}
+	memcpy(g->b[i].name, name, strlen(name) - 1);
+		//g->b[i].name = name;
 		printf("hi: %s\n", g->b[i].name);
 		print_blocked();
 	}
@@ -253,9 +254,9 @@ void block_user(char* handle) {
 
 void print_blocked() {
 	int i = 0;
-	printf("Blocked:");
-	printf("aure: %s\n", g->b[0].name);
-	while(g->b[i - 1].name) {
+//	printf("Blocked:");
+	//printf("aure: %s\n", g->b[0].name);
+	while(strlen(g->b[i].name) > 1) {
 		printf(" %s,", g->b[i].name);
 		i++;	
 	}
@@ -281,6 +282,7 @@ void list() {
 	ssize_t packet_len = sizeof(struct chat_header);
 	ssize_t rec_len;
 	struct chat_header* rec;
+	struct chat_header* rec1;
 
 	send_wait_for_recv(packet, packet_len, (uint8_t**)&rec, &rec_len);
 
@@ -289,6 +291,15 @@ void list() {
 		uint32_t count = *(uint32_t *)(data + sizeof(struct chat_header));
 		count = ntohl(count);
 		printf("Number of clients: %d\n", count);
+	}
+
+	if(recv(g->socket, (uint8_t *)rec1, 2400, 0) < 0) {
+		exit(1);
+	}
+	if(rec1->flag == 12) {
+		uint8_t *data = (uint8_t*)rec1;
+		printf("%s\n", data + sizeof(struct chat_header) + 1);
+		//recv(g->socket, (uint8_t *)rec1, 2400, 0);
 	}
 }
 

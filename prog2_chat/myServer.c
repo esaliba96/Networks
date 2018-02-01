@@ -164,6 +164,17 @@ void exit_response(struct client *c) {
 void send_client_list(struct client *c) {
 	uint32_t num_clients = client_nbr();
 	respond_to_client(c, 11, (uint8_t*)&num_clients, sizeof(uint32_t));
+	int i = 0;
+	struct client *curr;
+	curr = clients->head;
+	char data[102];
+	uint8_t len;
+	for(i; i < num_clients; i++) {
+		len = strlen(curr->handle);
+		memcpy(data, &len, 1);
+		memcpy(data+1, curr->handle, strlen(curr->handle));
+		respond_to_client(c, 12, (uint8_t*)&data, sizeof(uint32_t));
+	}
 }
 
 void add_user(struct client *c) {
