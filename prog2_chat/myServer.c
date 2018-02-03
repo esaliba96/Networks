@@ -123,7 +123,7 @@ void client_requests(struct client* c) {
 		c->packet_len = rec_buf;
 		c->packet = (struct chat_header*) buf;
 
-		printf("rec: %d\n", c->packet->flag);
+		printf("rec: %d\n", c->packet_len);
 		//printf("name: %d\n", ntohl(c->packet->size));
 		switch(c->packet->flag) {
 			case 1:
@@ -168,6 +168,7 @@ void send_client_list(struct client *c) {
 		respond_to_client(c, 12, (uint8_t*)&data, len + sizeof(len));
 		curr = curr->next;
 	}
+	respond_to_client(c, 13, NULL, 0);
 }
 
 void add_user(struct client *c) {
@@ -192,14 +193,14 @@ void respond_to_client(struct client* c, int flag, uint8_t* data, ssize_t data_l
 	struct chat_header response;
 
 	response.flag = flag;
-	response.size = sizeof(struct chat_header);
+	response.size = sizeof(struct chat_header) + data_len;
 	response.size = htonl(response.size);
 
 	uint8_t* packet = make_packet_server(response, data, data_len);
 	//printf("data %s\n", data);
 	//printf("data len %d\n", data_len);
 	ssize_t packet_len = sizeof(struct chat_header) + 1 + data_len;
-
+	printf("%d\n", packet_len);
 	if (send(c->socket, packet, packet_len, 0) < 0) {
 		perror("respond_to_client");
 	}
@@ -218,16 +219,16 @@ uint8_t* make_packet_server(struct chat_header response, uint8_t* data, ssize_t 
 
 void send_it(struct client* c) {
 	uint8_t* buf = (uint8_t*)c->packet;
-	uint8_t sender_len = *(buf+ sizeof(struct chat_header));
+	uint8_t sender_len = *(uint8_t*)(buf+ sizeof(struct chat_header));
 	uint8_t dest_handle_len;
 	
-	buf += sizeof(struct chat_header) + 1 + sender_len;
+	buf += sizeof(struct chat_header) + sender_len;
 	dest_handle_len = *buf;
 	char dest[dest_handle_len];
-	memcpy(dest, buf+1, (ssize_t)dest_handle_len);
+	memcpy(dest, buf, (ssize_t)dest_handle_len);
 	dest[dest_handle_len] = '\0';
-	//printf("dest1: %d\n", dest_handle_len);
-	//printf("dest: %s\n", dest);
+	printf("sender_len: %d\n", sender_len);
+	printf("sender: %s\n", dest);
 	struct client* dest_c = find(dest);
 	uint8_t* fail = malloc((ssize_t)dest_handle_len);
 	memcpy(fail, &dest_handle_len, sizeof(dest_handle_len));

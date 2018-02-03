@@ -52,6 +52,7 @@ int read_socket(int);
 void parse_input();
 void parse_message(char* input);
 void send_msg(uint8_t nbr_dest, char* dest, uint8_t dest_len, char* msg);
+void send_grp_msg(uint8_t nbr_dest, char dest[10][101], char* msg);
 void send_it(struct client *c);
 void send_client_list(struct client *c);
 void list();
