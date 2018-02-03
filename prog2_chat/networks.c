@@ -83,9 +83,7 @@ int tcpAccept(int server_socket, int debugFlag) {
 	return(client_socket);
 }
 
-int tcpClientSetup(char *serverName, char *port, int debugFlag) {
-	// This is used by the client to connect to a server using TCP
-	
+int tcpClientSetup(char *serverName, char *port, int debugFlag) {	
 	int socket_num;
 	uint8_t * ipAddress = NULL;
 	struct sockaddr_in6 server;      

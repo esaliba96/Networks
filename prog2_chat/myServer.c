@@ -194,7 +194,7 @@ void respond_to_client(struct client* c, int flag, uint8_t* data, ssize_t data_l
 
 	response.flag = flag;
 	response.size = sizeof(struct chat_header) + data_len;
-	response.size = htonl(response.size);
+	response.size = htons(response.size);
 
 	uint8_t* packet = make_packet_server(response, data, data_len);
 	//printf("data %s\n", data);
@@ -221,25 +221,37 @@ void send_it(struct client* c) {
 	uint8_t* buf = (uint8_t*)c->packet;
 	uint8_t sender_len = *(uint8_t*)(buf+ sizeof(struct chat_header));
 	uint8_t dest_handle_len;
-	
-	buf += sizeof(struct chat_header) + sender_len;
-	dest_handle_len = *buf;
-	char dest[dest_handle_len];
-	memcpy(dest, buf, (ssize_t)dest_handle_len);
-	dest[dest_handle_len] = '\0';
-	printf("sender_len: %d\n", sender_len);
-	printf("sender: %s\n", dest);
-	struct client* dest_c = find(dest);
-	uint8_t* fail = malloc((ssize_t)dest_handle_len);
-	memcpy(fail, &dest_handle_len, sizeof(dest_handle_len));
-	memcpy(fail + sizeof(dest_handle_len), buf+1, dest_handle_len);
-	ssize_t fail_len = dest_handle_len + 1;
-	if(dest_c == NULL) {
-		respond_to_client(c, 7, fail, fail_len);
-		return;
-	} else {
-		if (send(dest_c->socket, c->packet, c->packet_len, 0) < 0) {
-			perror("send_it");
+	uint8_t nbr = *(uint8_t*)(buf + sizeof(struct chat_header) + 1 + sender_len);
+	printf("%d\n", nbr);
+	int i = 0;
+ 	char dests[10][101];
+ 	memset(dests, 0, 10);
+ 	buf += sizeof(struct chat_header) + 1 + sender_len + 1;
+	for(i; i < nbr; i++) {
+		memcpy(&dest_handle_len, buf, 1);
+		buf += 1;
+		memcpy(dests[i], buf, dest_handle_len);
+		dests[i][dest_handle_len] = '\0';
+		buf += dest_handle_len; 
+	}
+
+	i =0;
+	for (i; i < nbr; i++) {
+		printf("%d %s\n",i, dests[i]);
+		dest_handle_len =  strlen(dests[i]);
+		struct client* dest_c = find(dests[i]);
+		uint8_t fail[strlen(dests[i])];
+		memcpy(fail, &dest_handle_len, sizeof(dest_handle_len));
+		memcpy(fail + sizeof(dest_handle_len), dests[i], dest_handle_len);
+		ssize_t fail_len = dest_handle_len + 1;
+		if(dest_c == NULL) {
+			printf("sent fail\n");
+			respond_to_client(c, 7, fail, fail_len);
+		} else {
+			printf("here send\n");
+		 	if (send(dest_c->socket, c->packet, c->packet_len, 0) < 0) {
+		 		perror("send_it");
+		 	}
 		}
 	}
 }
