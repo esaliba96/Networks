@@ -47,11 +47,9 @@ int main(int argc, char *argv[]) {
 		} else {
 			if (FD_ISSET(serverSocket, &fdvar)) {
 				accept_client(serverSocket);
-				//printf("accepted\n");
 			}
 			check_active(&fdvar);
 		}
-		//printf("hello: %d\n", ntohl(client_nbr()));
 	}
 	close(serverSocket);
 	
@@ -109,7 +107,6 @@ void check_active(fd_set *fdvar) {
 void client_requests(struct client* c) {
 	ssize_t rec_buf;
 	uint8_t* buf = malloc(2048);
-	//printf("%d\n", c->socket);
 	if ((rec_buf = recv(c->socket, buf, 2048-1, 0)) < 0) {
 		perror("client_requests");
 		free(buf);
@@ -117,20 +114,16 @@ void client_requests(struct client* c) {
 	}
 
 	if(rec_buf == 0) {
-		//printf("nothing boi\n");
 		remove_client(c);
 	} else {
 		c->packet_len = rec_buf;
 		c->packet = (struct chat_header*) buf;
 
-		printf("rec: %d\n", c->packet_len);
-		//printf("name: %d\n", ntohl(c->packet->size));
 		switch(c->packet->flag) {
 			case 1:
 				add_user(c);
 				break;
 			case 5:
-				//printf("we messaging\n");
 				send_it(c);
 				break;
 			case 10:
@@ -158,14 +151,13 @@ void send_client_list(struct client *c) {
 	uint8_t data[102];
 	uint8_t len;
 	ssize_t count = (ntohl(num_clients));
-	printf("%d\n", count);
+
 	for(i; i < count; i++) {
-		printf("%d\n", i);
+		printf("hello\n");
 		len = strlen(curr->handle);
 		memcpy(data, &len, sizeof(len));
-		//printf("%s\n", curr->handle);
 		memcpy(data+sizeof(len), curr->handle, len);
-		respond_to_client(c, 12, (uint8_t*)&data, len + sizeof(len));
+		respond_to_client(c, 12, data, len + sizeof(len));
 		curr = curr->next;
 	}
 	respond_to_client(c, 13, NULL, 0);
@@ -174,11 +166,9 @@ void send_client_list(struct client *c) {
 void add_user(struct client *c) {
 	uint8_t* buf = (uint8_t*)c->packet;
 	uint8_t handle_len = *(buf+ sizeof(struct chat_header));
-
 	char *handle = malloc(handle_len);
-	//printf("len: %d\n", buf[4]);
+
 	memcpy(handle, buf + sizeof(struct chat_header) + 1, handle_len);
-	//printf("%s\n", handle);
 	handle[buf[4]] = '\0';
 	if(find(handle)) {
 		respond_to_client(c, 3, NULL, 0);
@@ -197,10 +187,7 @@ void respond_to_client(struct client* c, int flag, uint8_t* data, ssize_t data_l
 	response.size = htons(response.size);
 
 	uint8_t* packet = make_packet_server(response, data, data_len);
-	//printf("data %s\n", data);
-	//printf("data len %d\n", data_len);
-	ssize_t packet_len = sizeof(struct chat_header) + 1 + data_len;
-	printf("%d\n", packet_len);
+	ssize_t packet_len = sizeof(struct chat_header) + data_len;
 	if (send(c->socket, packet, packet_len, 0) < 0) {
 		perror("respond_to_client");
 	}
@@ -222,10 +209,10 @@ void send_it(struct client* c) {
 	uint8_t sender_len = *(uint8_t*)(buf+ sizeof(struct chat_header));
 	uint8_t dest_handle_len;
 	uint8_t nbr = *(uint8_t*)(buf + sizeof(struct chat_header) + 1 + sender_len);
-	printf("%d\n", nbr);
 	int i = 0;
  	char dests[10][101];
  	memset(dests, 0, 10);
+
  	buf += sizeof(struct chat_header) + 1 + sender_len + 1;
 	for(i; i < nbr; i++) {
 		memcpy(&dest_handle_len, buf, 1);
@@ -237,7 +224,6 @@ void send_it(struct client* c) {
 
 	i =0;
 	for (i; i < nbr; i++) {
-		printf("%d %s\n",i, dests[i]);
 		dest_handle_len =  strlen(dests[i]);
 		struct client* dest_c = find(dests[i]);
 		uint8_t fail[strlen(dests[i])];
@@ -245,11 +231,9 @@ void send_it(struct client* c) {
 		memcpy(fail + sizeof(dest_handle_len), dests[i], dest_handle_len);
 		ssize_t fail_len = dest_handle_len + 1;
 		if(dest_c == NULL) {
-			printf("sent fail\n");
 			respond_to_client(c, 7, fail, fail_len);
 		} else {
-			printf("here send\n");
-		 	if (send(dest_c->socket, c->packet, c->packet_len, 0) < 0) {
+			if (send(dest_c->socket, c->packet, c->packet_len, 0) < 0) {
 		 		perror("send_it");
 		 	}
 		}

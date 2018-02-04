@@ -24,10 +24,20 @@ int main(int argc, char * argv[]) {
 	int socketNum = 0;       
 	g = malloc(sizeof(struct client_info));
 	g->b = (struct blocked*)malloc(100 * sizeof(struct blocked));
-	  for (size_t i = 0 ; i < 100; i++) {
-         memset(g->b[i].name, 0, 100);
-     }
+	for (size_t i = 0 ; i < 100; i++) {
+      memset(g->b[i].name, 0, 100);
+   }
+   checkArgs(argc, argv);
+	g->socket = tcpClientSetup(argv[2], argv[3], DEBUG_FLAG);
+	add_handle();
+	server_run();
+	free(g->b); 	
+	close(socketNum);
+	
+	return 0;
+}
 
+void checkArgs(int argc, char * argv[]) {
 	if(argc != 4) {
 		fprintf(stderr, "Usage: ./myClient <handle_name> <server_name> <server_port>\n");
 		exit(1);
@@ -38,24 +48,11 @@ int main(int argc, char * argv[]) {
 		exit(1);
 	}
 
-	strncpy(g->handle, argv[1], 100);
-
-	/* set up the TCP Client socket  */
-	g->socket = tcpClientSetup(argv[2], argv[3], DEBUG_FLAG);
-	add_handle();
-	server_run(); 	
-	close(socketNum);
-	
-	return 0;
-}
-
-void checkArgs(int argc, char * argv[]) {
-	/* check command line arguments  */
-	if (argc != 3)
-	{
-		printf("usage: %s host-name port-number \n", argv[0]);
-		exit(1);
+	if((int)argv[1][0] > 47 && (int)argv[1][0] < 58) {
+		fprintf(stderr, "Invalid handle, handle starts with a number %s\n", argv[1]);
+		exit(1);	
 	}
+	strncpy(g->handle, argv[1], 100);	
 }
 
 void add_handle() {
@@ -69,7 +66,6 @@ void add_handle() {
 
 	ssize_t recv_len;
 	struct chat_header *recv;
-	//printf("packet_len: %d\n", sent_packet_len);
 
 	send_wait_for_recv(sent_packet, sent_packet_len, (uint8_t**)&recv, &recv_len);
 
@@ -184,7 +180,6 @@ int read_socket(int sk) {
 		fprintf(stderr, "ERROR: Server has closed the socket\n");
 		exit(1);
 	}
-
 	int len = ntohs(rec.size) - 2;
 	if ((numBytes = recv(sk, (uint8_t *)data, len, 0)) < 0) {
 		perror("read_socket");
@@ -203,7 +198,7 @@ int read_socket(int sk) {
 		handle_len = *(buf);
 		memcpy(name, buf + sizeof(handle_len), handle_len);
 		name[handle_len] = '\0';
-		printf("\r\t%s\n", name);
+		printf("\r%s\n", name);
 		out = 1;
 	}
 
@@ -253,6 +248,10 @@ int block_user(char* handle) {
 	char *name = strdup(handle);
 	int len = strlen(handle);
 	name[len-1] = '\0';
+	if(len > 100) {
+		fprintf(stderr, "Invalid handle, handle longer than 100 characters: %s\n", name);
+		exit(1);
+	}
 	if(strlen(name) == 0) {
 		print_blocked(g);
 	} else {
@@ -296,6 +295,10 @@ int unblock_user(char* handle) {
 	char *name = strdup(handle);
 	int len = strlen(handle);
 	name[len-1] = '\0';
+	if(len > 100) {
+		fprintf(stderr, "Invalid handle, handle longer than 100 characters: %s\n", name);
+		exit(1);
+	}
 	if(!is_blocked(name)) {
 		printf("Unblock failed, handle %s is not blocked.\n", name);
 		return 0;	
@@ -331,31 +334,21 @@ void list() {
 	ssize_t packet_len = sizeof(struct chat_header);
 	ssize_t rec_len;
 	struct chat_header* rec;
-	int i = 0;
 	uint32_t count;
-	uint16_t size;
-//	send_packet(packet, packet_len);
+
 	send_wait_for_recv(packet, packet_len, (uint8_t**)&rec, &rec_len);
-	// size = rec->size;
-	// size = ntohs(size);
-	// printf("hi %d\n", size);
 	if(rec->flag == 11) {
 	 	uint8_t *data = (uint8_t *)rec;
 	 	count = *(uint32_t *)(data + sizeof(struct chat_header));
 	 	count = ntohl(count);
 	 	printf("Number of clients: %d\n", count);
 	}
-
-	// for(i; i <= count; i++) {
-	// 	read_socket(g->socket);
-	// }
 }
 
 void parse_message(char* input) {
 	uint8_t from_c_len = strlen(g->handle);
 	uint8_t dest_len;		
 	ssize_t data_len;
- 	char handle[101];
  	uint8_t i = 0, nbr = 1;
  	char* in;
  	char handles[10][101];
@@ -389,7 +382,7 @@ void parse_message(char* input) {
 	index += from_c_len;
   	memcpy(data + index, &nbr, sizeof(nbr));
 	index += sizeof(nbr);
-  	for(i; i < nbr; i++) {
+  	for(; i < nbr; i++) {
   		dest_len = strlen(handles[i]);
   		data_len += dest_len + sizeof(dest_len);
   		memcpy(data + index, &dest_len, sizeof(dest_len));
@@ -399,11 +392,9 @@ void parse_message(char* input) {
   	}
   	memcpy(data + index, msg, strlen(msg) + 1);
 
-  	uint8_t* sent_packet = make_packet_client(5, data, data_len);
+  	uint8_t* sent_packet = make_packet_client(5, (uint8_t*)data, data_len);
 	ssize_t sent_packet_len = sizeof(struct chat_header) + data_len;
 	
-	ssize_t recv_len;
-	struct chat_header *recv;
 	send_packet(sent_packet, sent_packet_len);
 }
 
@@ -414,7 +405,7 @@ void send_packet(uint8_t* sent_packet, ssize_t sent_packet_len) {
 	} 
 }
 
-void get_msg(char *buf) {
+void get_msg(uint8_t *buf) {
 	uint8_t sender_len = *(buf);
 	uint8_t dest_handle_len;	
 	char msg[1400];
@@ -428,16 +419,14 @@ void get_msg(char *buf) {
 	dest_handle_len = *buf;
 
 	buf += 1;
-	for(i; i < nbr; i++) {
+	for(; i < nbr; i++) {
 		memcpy(&dest_handle_len, buf, 1);
 		buf += 1;
 		buf += dest_handle_len; 
 	}
-	strcpy(msg, buf);
+	strcpy(msg, (char*)buf);
 
-	if(is_blocked(sender)) {
-		return 0;
-	} else {
+	if(!is_blocked(sender)) {
 		printf("\n%s: %s", sender, msg);
 	}
 }

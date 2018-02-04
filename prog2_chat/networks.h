@@ -63,6 +63,7 @@ int block_user(char*);
 void print_blocked();
 int is_blocked(char* name);
 int unblock_user(char* handle);
-void get_msg(char *buf);
+void get_msg(uint8_t *buf);
+
 
 #endif
