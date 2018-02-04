@@ -141,7 +141,7 @@ void server_run() {
 	fd_set fdvar;
 
 	while(1) {
-		printf("$: ");
+		printf("\r$: ");
 		fflush(stdout);
 
 		while(1) {
@@ -172,52 +172,57 @@ void server_run() {
 }
 
 int read_socket(int sk) {
-	struct chat_header *rec = malloc(2400);
+	int out = 0;
+	struct chat_header rec;
 	ssize_t numBytes = 0;
-	if ((numBytes = recv(sk, (uint8_t *)rec, 2400, 0)) < 0) {
+	uint8_t data[1200];
+	if ((numBytes = recv(sk, &rec, sizeof(struct chat_header), 0)) < 0) {
 		perror("read_socket");
-		return 1;
+		out = 1;
 	}
 	else if (numBytes == 0) {
 		fprintf(stderr, "ERROR: Server has closed the socket\n");
 		exit(1);
 	}
-	//printf("bytes: %d\n", numBytes);
-	uint8_t* buf = (uint8_t*)rec;
+
+	int len = ntohs(rec.size) - 2;
+	if ((numBytes = recv(sk, (uint8_t *)data, len, 0)) < 0) {
+		perror("read_socket");
+		out = 1;
+	}
+
+	uint8_t* buf = (uint8_t*)data;
 	uint8_t handle_len;
 	char name[101] = {0};
 	
-	if(rec->flag == 13) {
-		return 0;
+	if(rec.flag == 13) {
+		out = 0;
 	}
 
-	if(rec->flag == 12) {
-		handle_len = *(buf + sizeof(struct chat_header));
-		memcpy(name, buf + sizeof(struct chat_header) + sizeof(handle_len), handle_len);
+	if(rec.flag == 12) {
+		handle_len = *(buf);
+		memcpy(name, buf + sizeof(handle_len), handle_len);
 		name[handle_len] = '\0';
-		printf("   %s\n", name);
-		return 1;
+		printf("\r\t%s\n", name);
+		out = 1;
 	}
 
-	if(rec->flag == 7) {
+	if(rec.flag == 7) {
 		char fail[100] = {0};
 		uint8_t fail_len;
 
-		fail_len = *((uint8_t *)buf + sizeof(struct chat_header));		
-		memcpy(fail, ((uint8_t *)buf + sizeof(struct chat_header)) + 1, fail_len);
-		fprintf(stderr, "Client with handle %s does not exist.\n", fail);
-		return 0;
+		fail_len = *(uint8_t *)buf;		
+		memcpy(fail, ((uint8_t *)buf) + 1, fail_len);
+		fprintf(stderr, "\rClient with handle %s does not exist.\n", fail);
+		out = 1;
 	}
 
-	if(rec->flag == 5) {
-		get_msg(buf);
-		return 1;
+	if(rec.flag == 5) {
+		get_msg(data);
+		out = 1;
 	}
-	printf("$: ");
-	fflush(stdout);
 
-	free(rec);
-	return 1;
+	return out;
 }
 
 void parse_input() {
@@ -329,20 +334,21 @@ void list() {
 	int i = 0;
 	uint32_t count;
 	uint16_t size;
+//	send_packet(packet, packet_len);
 	send_wait_for_recv(packet, packet_len, (uint8_t**)&rec, &rec_len);
-	size = rec->size;
-	size = ntohs(size);
-	printf("hi %d\n", size);
+	// size = rec->size;
+	// size = ntohs(size);
+	// printf("hi %d\n", size);
 	if(rec->flag == 11) {
-		uint8_t *data = (uint8_t *)rec;
-		count = *(uint32_t *)(data + sizeof(struct chat_header));
-		count = ntohl(count);
-		printf("Number of clients: %d\n", count);
+	 	uint8_t *data = (uint8_t *)rec;
+	 	count = *(uint32_t *)(data + sizeof(struct chat_header));
+	 	count = ntohl(count);
+	 	printf("Number of clients: %d\n", count);
 	}
 
-	for(i; i <= count; i++) {
-		read_socket(g->socket);
-	}
+	// for(i; i <= count; i++) {
+	// 	read_socket(g->socket);
+	// }
 }
 
 void parse_message(char* input) {
@@ -398,37 +404,23 @@ void parse_message(char* input) {
 	
 	ssize_t recv_len;
 	struct chat_header *recv;
-	send_wait_for_recv(sent_packet, sent_packet_len, (uint8_t**)&recv, &recv_len);
+	send_packet(sent_packet, sent_packet_len);
+}
 
-
-	char fail[100] = {0};
-	uint8_t fail_len;
-	if(recv) {
-		switch(recv->flag) {
-			case 7:
-				fail_len = *((uint8_t *)recv + sizeof(struct chat_header));		
-				memcpy(fail, ((uint8_t *)recv + sizeof(struct chat_header)) + 1, fail_len);
-				fprintf(stderr, "Client with handle %s does not exist.\n", fail);
-				break;
-		}
-	}
-
-	i = 1;
-	for(i; i < nbr; i++) {
-		read_socket(g->socket);
-	}
-	//free(recv);
-	free(sent_packet);
+void send_packet(uint8_t* sent_packet, ssize_t sent_packet_len) {
+	if(send(g->socket, sent_packet, sent_packet_len, 0) < 0) {
+		perror("sending packets failed");
+		return;
+	} 
 }
 
 void get_msg(char *buf) {
-	uint8_t sender_len = *(buf+ sizeof(struct chat_header));
+	uint8_t sender_len = *(buf);
 	uint8_t dest_handle_len;	
 	char msg[1400];
 	int i = 0;
-	uint8_t nbr = *(uint8_t*)(buf + sizeof(struct chat_header) + 1 + sender_len);
+	uint8_t nbr = *(uint8_t*)(buf + 1 + sender_len);
 	
-	buf += sizeof(struct chat_header);
 	char sender[sender_len];
 	memcpy(sender, buf+1, (ssize_t)sender_len);
 	sender[sender_len] = '\0';
