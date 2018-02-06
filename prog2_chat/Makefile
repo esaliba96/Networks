@@ -12,10 +12,10 @@ ifeq ("$(ARCH)", "i686")
 	FILE = 32
 endif
 
-all:  $(FILE) cclient$(FILE) server$(FILE)
+all:  $(FILE) cclient$(FILE) server$(FILE) cleano
 
 32: 
-	# to make life easier - automatically deletes .o's that were most likely created on a 64 bit machine
+	# to make life easier automatically deletes .o's that were most likely created on a 64 bit machine
 	# assumes you are doing most of your development on 64 bit machines
 	rm -f *.o
 	

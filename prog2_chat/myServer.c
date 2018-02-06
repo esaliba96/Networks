@@ -107,6 +107,7 @@ void check_active(fd_set *fdvar) {
 void client_requests(struct client* c) {
 	ssize_t rec_buf;
 	uint8_t* buf = malloc(2048);
+
 	if ((rec_buf = recv(c->socket, buf, 2048-1, 0)) < 0) {
 		perror("client_requests");
 		free(buf);
@@ -153,7 +154,6 @@ void send_client_list(struct client *c) {
 	ssize_t count = (ntohl(num_clients));
 
 	for(i; i < count; i++) {
-		printf("hello\n");
 		len = strlen(curr->handle);
 		memcpy(data, &len, sizeof(len));
 		memcpy(data+sizeof(len), curr->handle, len);
@@ -169,7 +169,7 @@ void add_user(struct client *c) {
 	char *handle = malloc(handle_len);
 
 	memcpy(handle, buf + sizeof(struct chat_header) + 1, handle_len);
-	handle[buf[4]] = '\0';
+	handle[handle_len] = '\0';
 	if(find(handle)) {
 		respond_to_client(c, 3, NULL, 0);
 		return;

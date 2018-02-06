@@ -29,7 +29,7 @@
 struct chat_header { 
 	uint16_t size;
 	uint8_t flag;
-};
+}__attribute__((packed));
 
 // for the server side
 int tcpServerSetup(int portNumber);
@@ -41,7 +41,7 @@ void accept_client(int server_socket);
 void set_active(fd_set *fdvar);
 void add_handle();
 void check_active(fd_set *fdvar);
-void send_wait_for_recv(uint8_t* sent_packet, ssize_t sent_packet_len, uint8_t** rec_packet, ssize_t* rec_packet_len);
+void send_wait_for_recv(uint8_t* sent_packet, ssize_t sent_packet_len, uint8_t** rec_packet, int* rec_packet_flag);
 void send_packet(uint8_t* sent_packet, ssize_t sent_packet_len);
 uint8_t* make_packet_client(uint8_t flag, uint8_t *data, ssize_t data_len);
 void client_requests(struct client* c);
