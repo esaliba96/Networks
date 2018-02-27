@@ -5,7 +5,7 @@
 typedef enum state STATE;
 
 enum state {
-	DONE, FILENAME, RECV_DATA, FILE_OK, START, END_FILE, FULL_WINDOW
+	DONE, FILENAME, RECV_DATA, FILE_OK, START, END_FILE, SREJ_BLOCK,
 };
 
 void run_client(char* local_file, char* remote_file, int32_t window_size, int32_t buffer_size, char* host, int16_t port);
@@ -14,7 +14,7 @@ STATE start_state(char* host, uint16_t port, Connection *server);
 STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* server);
 STATE file_ok(int* out_file_fd, char* out_file_name);
 STATE recv_data(int32_t out_fd, Connection *server, Window* window);
-
+STATE srej_block(uint32_t out_fd, Connection *server, Window* window);
 
 int main(int argc, char** argv) {
 	char* local_file;
@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
 
 	remote_file = argv[2];
 
-	sendtoErr_init(atof(argv[5]), DROP_OFF, FLIP_OFF, DEBUG_OFF, RSEED_OFF);
+	sendtoErr_init(atof(argv[5]), DROP_ON, FLIP_ON, DEBUG_OFF, RSEED_OFF);
 
 	run_client(argv[1], argv[2], atoi(argv[3]), atoi(argv[4]), argv[6], atoi(argv[7]));
 
@@ -74,6 +74,8 @@ void run_client(char* local_file, char* remote_file, int32_t window_size, int32_
 			case RECV_DATA:
 				state = recv_data(out_fd, &server, &window);
 				break;
+			case SREJ_BLOCK:
+				state = srej_block(out_fd, &server, &window);
 			default:
 				printf("ERROR - default STATE\n");
 				break;
@@ -126,7 +128,6 @@ STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* 
 	memcpy(buf + 2* SIZE_OF_BUF_SIZE, fname, fname_len);
 
 	send_buf(buf, fname_len + 2 * SIZE_OF_BUF_SIZE, server, FNAME, 0, packet);
-	printf("sent\n");
 	if ((state = process_select(server, &retry_count, FILENAME, FILE_OK, DONE)) == FILE_OK) {
 		recv_check = recv_buf(packet, MAX_LEN, server->sk_num, server, &flag, &seq_num);
 		if (recv_check == CRC_ERROR) {
@@ -177,7 +178,60 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 		update_window(window, window->bottom + 1);
 		send_buf(0, 0, server, RR, window->bottom, packet);
 		write(out_fd, data_buf, data_len);
+	} else if (seq_num < window->bottom) {
+		send_buf(0, 0, server, RR, window->bottom, packet);
+	} else {
+		send_buf(0, 0, server, SREJ, window->current, packet);
+		add_data_to_buffer(window, data_buf);
+		window->current = window->bottom;
+		return SREJ_BLOCK;
 	}
 
 	return RECV_DATA;
+}
+
+STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
+	printf("here in block\n");
+	int retry_count = 0;
+   int return_val;
+   int seq_num;
+	uint8_t flag;
+	int32_t data_len;
+	uint8_t data_buf[MAX_LEN];
+	uint8_t data[MAX_LEN];
+	uint8_t packet[MAX_LEN];
+	int i;
+
+   retry_count++;
+
+   if (retry_count > MAX_TRIES) {
+      printf("Sent data %d times, no ACK, client is probably gone - I'm dead", MAX_TRIES);
+      return DONE;
+   }
+
+   if (select_call(server->sk_num, SHORT_TIME, 0, NOT_NULL) == 1) {
+      retry_count = 0;
+		data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
+		printf("data: %s\n", data_buf);
+		if(seq_num == window->current) {
+			printf("bottom: %d\n", window->bottom);
+			printf("current: %d\n", window->current);
+			printf("ccoll\n");
+			for (i = window->bottom; i < window->current; i++) {
+				get_data_from_buffer(window, i, data);
+				write(out_fd, data, strlen(data));
+			}
+			send_buf(0, 0, server, RR, window->current, packet);
+
+			if (full(window)) {
+				update_window(window, window->current);
+				return RECV_DATA;
+			}
+		}
+		return RECV_DATA;
+   } else {
+   	return SREJ_BLOCK; 
+   }
+
+   return SREJ_BLOCK;
 }

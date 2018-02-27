@@ -117,5 +117,6 @@ void add_data_to_buffer(Window* window, uint8_t* buf) {
 
 void get_data_from_buffer(Window* window, int seq, char* data) {
    int index = seq % window->size;
+   printf("index where lost %d\n", index);
    strcpy(data, window->buff[index].payload);
 }

@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	sendtoErr_init(atof(argv[1]), DROP_OFF, FLIP_OFF, DEBUG_OFF, RSEED_OFF);
+	sendtoErr_init(atof(argv[1]), DROP_ON, FLIP_ON, DEBUG_OFF, RSEED_OFF);
 
 	if (argc == 3) {
 		port_number = atoi(argv[2]);
@@ -174,17 +174,32 @@ STATE recv_acks(Connection *client, Window *window) {
    int32_t seq_num = 0;
    uint8_t flag;
    uint8_t packet[MAX_LEN];
+   char data[MAX_LEN];
 
    recv_len = recv_buf(packet, MAX_LEN, client->sk_num, client, &flag, &seq_num);
 
+   if (recv_len == CRC_ERROR) {
+      return WAIT_ON_DATA; 
+   }
+
    if(flag == RR) {
-      printf("recv rr\n");
+      printf("recv rr for %d\n", seq_num);
       if(seq_num > window->bottom) {
          update_window(window, seq_num);
       }
    }
    if (flag == EOF_ACK) {
       return DONE;
+   }
+   if (flag == SREJ) {
+      // printf("rejected\n");
+      // printf("seq rejec: %d\n", seq_num);
+      // printf("bottom %d\n", window->bottom);
+      // printf("top %d\n", window->top);
+      // printf("current %d\n", window->current);
+      get_data_from_buffer(window, seq_num, &data);
+      printf("data: %s\n", data);
+      send_buf(data, strlen(data), client, DATA, seq_num, packet);
    }
 
    return SEND_DATA;
@@ -210,7 +225,7 @@ STATE wait_for_data(Connection* client, Window* window) {
       get_data_from_buffer(window, window->bottom, &data);
       send_buf(data, strlen(data), client, RESENT, window->bottom, packet);
       printf("resending %s\n", data);
-
+      return_val = WAIT_ON_DATA;
    }
    return return_val;
 }
