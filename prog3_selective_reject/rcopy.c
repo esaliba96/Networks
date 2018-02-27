@@ -13,6 +13,8 @@ void check_args(int argc, char** argv);
 STATE start_state(char* host, uint16_t port, Connection *server);
 STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* server);
 STATE file_ok(int* out_file_fd, char* out_file_name);
+STATE recv_data(int32_t out_fd, Connection *server, Window* window);
+
 
 int main(int argc, char** argv) {
 	char* local_file;
@@ -22,7 +24,7 @@ int main(int argc, char** argv) {
 
 	remote_file = argv[2];
 
-	sendtoErr_init(atof(argv[5]), DROP_ON, FLIP_ON, DEBUG_OFF, RSEED_OFF);
+	sendtoErr_init(atof(argv[5]), DROP_OFF, FLIP_OFF, DEBUG_OFF, RSEED_OFF);
 
 	run_client(argv[1], argv[2], atoi(argv[3]), atoi(argv[4]), argv[6], atoi(argv[7]));
 
@@ -41,8 +43,8 @@ void check_args(int argc, char** argv) {
 		printf("Remote filename needs to be less than 100 and is: %d\n", strlen(argv[2]));
 		exit(-1);
 	}
-	if (atoi(argv[4]) < 400 || atoi(argv[4]) > 1400) {
-		printf("Buffer size needs to be between 400 and 1400 and is: %d\n", atoi(argv[4]));
+	if (atoi(argv[4]) < 4 || atoi(argv[4]) > 1400) {
+		printf("Buffer size needs to be between 4 and 1400 and is: %d\n", atoi(argv[4]));
 		exit(-1);
 	}
 	if(atoi(argv[5]) < 0 || atoi(argv[5]) >= 1) {
@@ -55,6 +57,8 @@ void run_client(char* local_file, char* remote_file, int32_t window_size, int32_
 	Connection server;
 	int32_t out_fd;
 	STATE state = START;
+	Window window;
+	init_window(&window, window_size);
 
 	while(state != DONE) {
 		switch(state) {
@@ -68,13 +72,14 @@ void run_client(char* local_file, char* remote_file, int32_t window_size, int32_
 				state = file_ok(&out_fd, local_file);
 				break;
 			case RECV_DATA:
-				printf("hello\n");
+				state = recv_data(out_fd, &server, &window);
 				break;
 			default:
 				printf("ERROR - default STATE\n");
 				break;
 		}
 	}
+	close(out_fd);
 }
 
 STATE start_state(char* host, uint16_t port, Connection *server) {
@@ -128,5 +133,39 @@ STATE file_ok(int* out_file_fd, char* out_file_name) {
 		perror("File open error");
 		return DONE;
 	}
+	return RECV_DATA;
+}
+
+STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
+	int32_t seq_num = 0;
+	uint8_t flag;
+	int32_t data_len;
+	uint8_t data_buf[MAX_LEN];
+	uint8_t packet[MAX_LEN];
+
+	if(select_call(server->sk_num, LONG_TIME, 0, NOT_NULL)  == 0) {
+		printf("Timeout after 10 seconds, server is dead!\n");
+		return DONE;
+	}
+
+	data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
+
+	if (flag == CRC_ERROR) {
+		printf("needs to be done\n");
+		exit(-1);
+	}
+	if (flag == END_OF_FILE) {
+		send_buf(0, 0, server, EOF_ACK, seq_num + 1, packet);
+		return DONE;
+	}
+
+	if (seq_num == window->bottom) {
+		// printf("data len: %d\n", data_len);
+		// printf("data: %s\n", data_buf);
+		update_window(window, window->bottom + 1);
+		send_buf(0, 0, server, RR, window->bottom, packet);
+		write(out_fd, data_buf, data_len);
+	}
+
 	return RECV_DATA;
 }

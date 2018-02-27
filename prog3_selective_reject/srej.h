@@ -15,6 +15,11 @@
 
 typedef struct header Header;
 typedef struct window Window;
+typedef struct data Data;
+
+struct data {
+   char payload[MAX_LEN];
+};
 
 struct header {
    uint32_t seq_num;
@@ -24,12 +29,14 @@ struct header {
 
 struct window {
    int32_t size;
-   int32_t buf_size; 
-   int32_t seq_num;  
+   int32_t bottom;
+   int32_t current;
+   int32_t top;
+   struct data *buff;
 };
 
 enum FLAG {
-   FNAME, DATA, FNAME_OK, FNAME_BAD, RR, SREJ, END_OF_FILE, EOF_ACK, CRC_ERROR = -1 
+   FNAME, DATA, FNAME_OK, FNAME_BAD, RR, SREJ, END_OF_FILE, EOF_ACK, CONNECT, ACCEPTED, CRC_ERROR = -1 
 };
 
 int32_t send_buf(uint8_t *buf, uint32_t len, Connection *connection, uint8_t flag, 
@@ -40,5 +47,10 @@ int process_select(Connection* client, int* retry_count, int select_timeout_stat
 	int data_ready_state, int done_state);
 int create_header(uint32_t len, uint8_t flag, uint32_t seq_num, uint8_t* packet);
 int retrieve_header(char* data_buf, int recv_len, uint8_t *flag, int32_t* seq_num);
+void init_window(Window *window, int size);
+int full(Window* window);
+void add_data_to_buffer(Window* window, uint8_t* buf);
+void update_window(Window*, int);
+void get_data_from_buffer(Window* window, int seq, char* data);
 
 #endif

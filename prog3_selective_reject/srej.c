@@ -22,6 +22,7 @@ int32_t recv_buf(uint8_t *buf, uint32_t len, int32_t recv_sk_num,
    int32_t data_len = 0;
 
    recv_len = safe_recv(recv_sk_num, data_buf, len, connection);
+   printf("len recv %d\n", len);
    data_len = retrieve_header(data_buf, recv_len, flag, seq_num);
 
    if (data_len > 0) {
@@ -81,4 +82,40 @@ int process_select(Connection* client, int* retry_count, int select_timeout_stat
    }
 
    return return_val;
+}
+
+void init_window(Window *window, int size) {
+   int i =0;
+
+   window->bottom = 1;
+   window->current = 1;
+   window->top = size;
+   window->size = size;
+   window->buff = malloc((size + 1) * sizeof(Data));
+
+   for (; i < size; i++) {
+      memset(window->buff[i].payload, 0, MAX_LEN);
+   }
+}
+
+int full(Window* window) {
+   return window->current > window->top;
+}
+
+void update_window(Window *window, int seq_num) {
+   window->bottom = seq_num;
+   window->top = seq_num + window->size - 1;
+}
+
+void add_data_to_buffer(Window* window, uint8_t* buf) {
+   int index = window->current % window->size;
+   printf("window size: %d\n", window->size);
+   printf("index: %d\n", index);
+   strcpy(window->buff[index].payload, buf);
+   printf("window buff: %s\n", window->buff[index].payload);
+}
+
+void get_data_from_buffer(Window* window, int seq, char* data) {
+   int index = seq % window->size;
+   strcpy(data, window->buff[index].payload);
 }
