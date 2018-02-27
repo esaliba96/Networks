@@ -8,8 +8,8 @@ enum state {
 };
 
 void run_server(int port_number);
-void process_client(uint8_t* buf, int32_t recv_len, Connection* client);
-STATE filename(Connection* client, uint8_t* buf, int32_t recv_len, int32_t* data_file, Window *window, int32_t* buf_size);
+void process_client(uint8_t* buf, int32_t recv_len, Connection* client, uint8_t flag);
+STATE filename(Connection* client, uint8_t* buf, int32_t recv_len, int32_t* data_file, Window *window, int32_t* buf_size, uint8_t flag);
 STATE send_data(Connection* client, uint8_t* packet, int32_t data_file, int32_t* seq_num, Window *window, int32_t buf_size);
 STATE recv_acks(Connection *client, Window *window);
 STATE wait_for_data(Connection* client, Window* window);
@@ -53,7 +53,7 @@ void run_server(int server_sk) {
                exit(-1);
             }
             if (pid == 0) {
-               process_client(buf, recv_len, &client);
+               process_client(buf, recv_len, &client, flag);
                exit(0);
             }
             while (waitpid(-1, &status, WNOHANG) > 0) {
@@ -63,13 +63,15 @@ void run_server(int server_sk) {
    }
 }
 
-void process_client(uint8_t* buf, int32_t recv_len, Connection* client) {
+void process_client(uint8_t* buf, int32_t recv_len, Connection* client, uint8_t flag) {
    STATE state = START;
    int32_t data_file = 0;
    Window window;
    int32_t buf_size = 0;
    int32_t seq_num = START_SEQ_NUM;
    uint8_t packet[MAX_LEN];
+   uint8_t buf1[MAX_LEN];
+   uint32_t recv_len1;
    
    while(state != DONE) {
       switch (state) {
@@ -77,7 +79,7 @@ void process_client(uint8_t* buf, int32_t recv_len, Connection* client) {
             state = FILENAME;
             break;
          case FILENAME:
-            state = filename(client, buf, recv_len, &data_file, &window, &buf_size);
+            state = filename(client, buf, recv_len, &data_file, &window, &buf_size, flag);
             break;
          case SEND_DATA:
             state = send_data(client, packet, data_file, &seq_num, &window, buf_size);
@@ -96,22 +98,34 @@ void process_client(uint8_t* buf, int32_t recv_len, Connection* client) {
    }
 }
 
-STATE filename(Connection* client, uint8_t* buf, int32_t recv_len, int32_t* data_file, Window *window, int32_t* buf_size) {
+STATE filename(Connection* client, uint8_t* buf, int32_t recv_len, int32_t* data_file, Window *window, int32_t* buf_size, uint8_t flag) {
    char fname[MAX_LEN];
-   STATE state = DONE;
    int32_t window_size;
+   uint8_t packet[MAX_LEN];
+   int32_t seq_num = 0;
  
-   memcpy(buf_size, buf, SIZE_OF_BUF_SIZE);
-   *buf_size = ntohl(*buf_size);
-   memcpy(&window_size, &buf[SIZE_OF_BUF_SIZE], SIZE_OF_BUF_SIZE);
-   memcpy(fname, &buf[2*SIZE_OF_BUF_SIZE], recv_len - 2 * SIZE_OF_BUF_SIZE);
-   init_window(window, window_size);
-  
    if ((client->sk_num = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
       perror("filename, open client socket");
       exit(-1);
    }
 
+   if (flag == CONNECT) {
+      send_buf(0, 0, client, ACCEPTED, 0, packet);
+   }
+   
+   recv_len = recv_buf(packet, MAX_LEN, client->sk_num, client, &flag, &seq_num);
+   
+   if (recv_len == CRC_ERROR) {
+      return START;
+   }
+   
+   if (flag == FNAME) { 
+      memcpy(buf_size, packet, SIZE_OF_BUF_SIZE);
+      *buf_size = ntohl(*buf_size);
+      memcpy(&window_size, &packet[SIZE_OF_BUF_SIZE], SIZE_OF_BUF_SIZE);
+      memcpy(fname, &packet[2*SIZE_OF_BUF_SIZE], recv_len - 2 * SIZE_OF_BUF_SIZE);
+      init_window(window, window_size);
+   }
    if (((*data_file) = open(fname, O_RDONLY)) < 0) {
       send_buf(0, 0, client, FNAME_BAD, 0, buf);
       return DONE;

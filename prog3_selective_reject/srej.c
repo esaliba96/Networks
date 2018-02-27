@@ -22,7 +22,7 @@ int32_t recv_buf(uint8_t *buf, uint32_t len, int32_t recv_sk_num,
    int32_t data_len = 0;
 
    recv_len = safe_recv(recv_sk_num, data_buf, len, connection);
-   printf("len recv %d\n", len);
+  // printf("len recv %d\n", len);
    data_len = retrieve_header(data_buf, recv_len, flag, seq_num);
 
    if (data_len > 0) {

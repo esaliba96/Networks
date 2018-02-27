@@ -84,6 +84,11 @@ void run_client(char* local_file, char* remote_file, int32_t window_size, int32_
 
 STATE start_state(char* host, uint16_t port, Connection *server) {
 	STATE state = FILENAME;
+	uint8_t packet[MAX_LEN];
+	uint8_t flag = 0;
+	int32_t seq_num = 0;
+	int32_t recv_check = 0;
+	static int retry_count = 0;
 
 	if (server->sk_num > 0) {
 		close(server->sk_num);
@@ -91,14 +96,22 @@ STATE start_state(char* host, uint16_t port, Connection *server) {
 	if (udp_client_setup(host, port, server) < 0) {
 		state = DONE;
 	} else {
-		state = FILENAME;
-	}
+		send_buf(0, 0, server, CONNECT, 0, packet);
+		if ((state = process_select(server, &retry_count, START, FILENAME, DONE)) == FILENAME) {
+			recv_check = recv_buf(packet, MAX_LEN, server->sk_num, server, &flag, &seq_num);
 
+			if (recv_check == CRC_ERROR) {
+				state = START;
+			} else if (flag == ACCEPTED) {
+				state = FILENAME;	
+			}
+		}
+	}
 	return state;
 }
 
 STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* server) {
-	STATE state = START;
+	STATE state = FILENAME;
 	uint8_t packet[MAX_LEN];
 	uint8_t buf[MAX_LEN];
 	uint8_t flag = 0;
@@ -113,12 +126,11 @@ STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* 
 	memcpy(buf + 2* SIZE_OF_BUF_SIZE, fname, fname_len);
 
 	send_buf(buf, fname_len + 2 * SIZE_OF_BUF_SIZE, server, FNAME, 0, packet);
-
-	if ((state = process_select(server, &retry_count, START, FILE_OK, DONE)) == FILE_OK) {
+	printf("sent\n");
+	if ((state = process_select(server, &retry_count, FILENAME, FILE_OK, DONE)) == FILE_OK) {
 		recv_check = recv_buf(packet, MAX_LEN, server->sk_num, server, &flag, &seq_num);
-
 		if (recv_check == CRC_ERROR) {
-			state = START;
+			state = FILENAME;
 		} else if (flag == FNAME_BAD) {
 			printf("File %s not found\n", fname);
 			state = DONE;
