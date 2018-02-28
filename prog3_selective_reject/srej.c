@@ -22,7 +22,6 @@ int32_t recv_buf(uint8_t *buf, uint32_t len, int32_t recv_sk_num,
    int32_t data_len = 0;
 
    recv_len = safe_recv(recv_sk_num, data_buf, len, connection);
-  // printf("len recv %d\n", len);
    data_len = retrieve_header(data_buf, recv_len, flag, seq_num);
 
    if (data_len > 0) {
@@ -95,6 +94,7 @@ void init_window(Window *window, int size) {
 
    for (; i < size; i++) {
       memset(window->buff[i].payload, 0, MAX_LEN);
+      window->buff[i].valid = 0;
    }
 }
 
@@ -103,20 +103,36 @@ int full(Window* window) {
 }
 
 void update_window(Window *window, int seq_num) {
+   int i;
+
+   for (i = window->bottom; i < seq_num; i++) {
+      window->buff[i].valid = 0;
+   }
    window->bottom = seq_num;
    window->top = seq_num + window->size - 1;
 }
 
-void add_data_to_buffer(Window* window, uint8_t* buf) {
+void add_data_to_buffer(Window* window, uint8_t* buf, int32_t data_len) {
    int index = window->current % window->size;
    printf("window size: %d\n", window->size);
    printf("index: %d\n", index);
-   strcpy(window->buff[index].payload, buf);
+   memcpy(window->buff[index].payload, buf, data_len);
+   window->buff[index].valid = 1;
    printf("window buff: %s\n", window->buff[index].payload);
 }
 
-void get_data_from_buffer(Window* window, int seq, char* data) {
+void get_data_from_buffer(Window* window, int seq, char** data) {
    int index = seq % window->size;
-   printf("index where lost %d\n", index);
-   strcpy(data, window->buff[index].payload);
+   printf("index where lost %s\n", window->buff[index].payload);
+   *data = window->buff[index].payload;
+}
+
+void remove_from_buffer(Window *window, int seq) {
+   int index = seq % window->size;
+   window->buff[index].valid = 0;
+}
+
+int check_if_valid(Window *window, int seq) {
+   int index = seq % window->size;
+   return window->buff[index].valid;
 }

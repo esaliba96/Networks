@@ -163,6 +163,7 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 
 	data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
 
+	//printf("se num: %d\n", seq_num);
 	if (flag == CRC_ERROR) {
 		printf("needs to be done\n");
 		exit(-1);
@@ -174,16 +175,18 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 
 	if (seq_num == window->bottom) {
 		// printf("data len: %d\n", data_len);
-		// printf("data: %s\n", data_buf);
+		 //printf("data: %s\n", data_buf);
 		update_window(window, window->bottom + 1);
 		send_buf(0, 0, server, RR, window->bottom, packet);
 		write(out_fd, data_buf, data_len);
 	} else if (seq_num < window->bottom) {
+		//printf("bottom: %d\n", window->bottom);
 		send_buf(0, 0, server, RR, window->bottom, packet);
 	} else {
-		send_buf(0, 0, server, SREJ, window->current, packet);
-		add_data_to_buffer(window, data_buf);
+		//printf("data len added %d\n", data_len);
+		add_data_to_buffer(window, data_buf, data_len);
 		window->current = window->bottom;
+		send_buf(0, 0, server, RR, window->current, packet);
 		return SREJ_BLOCK;
 	}
 
@@ -191,16 +194,17 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 }
 
 STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
-	printf("here in block\n");
+	//printf("here in block\n");
 	int retry_count = 0;
    int return_val;
    int seq_num;
 	uint8_t flag;
 	int32_t data_len;
 	uint8_t data_buf[MAX_LEN];
-	uint8_t data[MAX_LEN];
+	char* data;
 	uint8_t packet[MAX_LEN];
-	int i;
+	int32_t i;
+	STATE state = SREJ_BLOCK;
 
    retry_count++;
 
@@ -212,15 +216,26 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
    if (select_call(server->sk_num, SHORT_TIME, 0, NOT_NULL) == 1) {
       retry_count = 0;
 		data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
-		printf("data: %s\n", data_buf);
+		add_data_to_buffer(window, data_buf, data_len);
+		
 		if(seq_num == window->current) {
-			printf("bottom: %d\n", window->bottom);
-			printf("current: %d\n", window->current);
-			printf("ccoll\n");
-			for (i = window->bottom; i < window->current; i++) {
-				get_data_from_buffer(window, i, data);
-				write(out_fd, data, strlen(data));
+			for (i = window->bottom; i <= window->top; i++) {
+				window->current = i;
+				if(check_if_valid(window, i) == 0) {
+					printf("rej: %d\n", i);
+					send_buf(0, 0, server, SREJ, i, packet);
+					break;
+				}
 			}
+
+			for (i = window->bottom; i < window->current; i++) {
+				printf("i: %d\n", i);
+				get_data_from_buffer(window, i, &data);
+				printf("data here: %s\n", data);
+				remove_from_buffer(window, i);
+				write(out_fd, data, data_len);
+			}
+
 			send_buf(0, 0, server, RR, window->current, packet);
 
 			if (full(window)) {
@@ -232,6 +247,7 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
    } else {
    	return SREJ_BLOCK; 
    }
-
+	//send_buf(0, 0, server, RR, window->current, packet);
+   
    return SREJ_BLOCK;
 }

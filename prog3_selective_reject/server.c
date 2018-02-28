@@ -153,12 +153,12 @@ STATE send_data(Connection* client, uint8_t* packet, int32_t data_file, int32_t*
          perror("send_data read error");
          return DONE;
       case 0:
-         send_buf(buf, strlen(buf), client, END_OF_FILE, window->current, packet);
+         send_buf(buf, len_read, client, END_OF_FILE, window->current, packet);
          printf("in eof\n");
          return WAIT_ON_DATA;
       default:
-         send_buf(buf, strlen(buf), client, DATA, window->current, packet);
-         add_data_to_buffer(window, buf);
+         send_buf(buf, len_read, client, DATA, window->current, packet);
+         add_data_to_buffer(window, buf, len_read);
          window->current++;
          break;
    }
@@ -174,7 +174,7 @@ STATE recv_acks(Connection *client, Window *window) {
    int32_t seq_num = 0;
    uint8_t flag;
    uint8_t packet[MAX_LEN];
-   char data[MAX_LEN];
+   char* data;
 
    recv_len = recv_buf(packet, MAX_LEN, client->sk_num, client, &flag, &seq_num);
 
@@ -192,13 +192,13 @@ STATE recv_acks(Connection *client, Window *window) {
       return DONE;
    }
    if (flag == SREJ) {
-      // printf("rejected\n");
+      printf("rejected\n");
       // printf("seq rejec: %d\n", seq_num);
       // printf("bottom %d\n", window->bottom);
       // printf("top %d\n", window->top);
       // printf("current %d\n", window->current);
       get_data_from_buffer(window, seq_num, &data);
-      printf("data: %s\n", data);
+      printf("data srej: %s\n", data);
       send_buf(data, strlen(data), client, DATA, seq_num, packet);
    }
 
@@ -208,7 +208,7 @@ STATE recv_acks(Connection *client, Window *window) {
 STATE wait_for_data(Connection* client, Window* window) {
    int retry_count = 0;
    int return_val;
-   char data[MAX_LEN];
+   char *data;
    char packet[MAX_LEN];
 
    retry_count++;
