@@ -50,10 +50,11 @@ int create_header(uint32_t len, uint8_t flag, uint32_t seq_num, uint8_t* packet)
 int retrieve_header(char* data_buf, int recv_len, uint8_t *flag, int32_t* seq_num);
 void init_window(Window *window, int size);
 int full(Window* window);
-void add_data_to_buffer(Window* window, uint8_t* buf, int32_t data_len);
+void add_data_to_buffer(Window* window, uint8_t* buf, int32_t data_len, int32_t seq_num);
 void update_window(Window*, int);
 void get_data_from_buffer(Window* window, int seq, char** data);
 void remove_from_buffer(Window *window, int seq);
 int check_if_valid(Window *window, int seq);
+int all_invalid(Window *window);
 
 #endif

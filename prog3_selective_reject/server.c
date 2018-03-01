@@ -10,9 +10,10 @@ enum state {
 void run_server(int port_number);
 void process_client(uint8_t* buf, int32_t recv_len, Connection* client, uint8_t flag);
 STATE filename(Connection* client, uint8_t* buf, int32_t recv_len, int32_t* data_file, Window *window, int32_t* buf_size, uint8_t flag);
-STATE send_data(Connection* client, uint8_t* packet, int32_t data_file, int32_t* seq_num, Window *window, int32_t buf_size);
-STATE recv_acks(Connection *client, Window *window);
+STATE send_data(Connection* client, uint8_t* packet, int32_t data_file, int32_t* seq_num, Window *window, int32_t buf_size, int32_t* eof_seq);
+STATE recv_acks(Connection *client, Window *window, int32_t eof_seq);
 STATE wait_for_data(Connection* client, Window* window);
+STATE file_end(Connection* client, Window *window);
 
 int main(int argc, char** argv) {
 	int port_number = 0;
@@ -72,6 +73,7 @@ void process_client(uint8_t* buf, int32_t recv_len, Connection* client, uint8_t 
    uint8_t packet[MAX_LEN];
    uint8_t buf1[MAX_LEN];
    uint32_t recv_len1;
+   int32_t eof_seq;
    
    while(state != DONE) {
       switch (state) {
@@ -82,13 +84,16 @@ void process_client(uint8_t* buf, int32_t recv_len, Connection* client, uint8_t 
             state = filename(client, buf, recv_len, &data_file, &window, &buf_size, flag);
             break;
          case SEND_DATA:
-            state = send_data(client, packet, data_file, &seq_num, &window, buf_size);
+            state = send_data(client, packet, data_file, &seq_num, &window, buf_size, &eof_seq);
             break;
          case RECV_ACKS:
-            state = recv_acks(client, &window);
+            state = recv_acks(client, &window, eof_seq);
             break;
          case WAIT_ON_DATA:
             state = wait_for_data(client, &window);
+            break;
+         case FILE_END:
+            state = file_end(client, &window);
             break;
          default:
             printf("ERROR - default STATE\n");
@@ -136,7 +141,7 @@ STATE filename(Connection* client, uint8_t* buf, int32_t recv_len, int32_t* data
    return SEND_DATA;
 }
 
-STATE send_data(Connection* client, uint8_t* packet, int32_t data_file, int32_t* seq_num, Window *window, int32_t buf_size) {
+STATE send_data(Connection* client, uint8_t* packet, int32_t data_file, int32_t* seq_num, Window *window, int32_t buf_size, int32_t* eof_seq) {
    uint8_t buf[MAX_LEN];
    int32_t len_read = 0;
 
@@ -153,12 +158,15 @@ STATE send_data(Connection* client, uint8_t* packet, int32_t data_file, int32_t*
          perror("send_data read error");
          return DONE;
       case 0:
-         send_buf(buf, len_read, client, END_OF_FILE, window->current, packet);
-         printf("in eof\n");
+         *eof_seq = window->current;
+         printf("eof index %d\n", *eof_seq);
+         //send_buf(buf, len_read, client, END_OF_FILE, window->current, packet);
+         // printf("in eof\n");
          return WAIT_ON_DATA;
       default:
+         printf("sent buf \"%s\" at index %d\n", buf, window->current);
          send_buf(buf, len_read, client, DATA, window->current, packet);
-         add_data_to_buffer(window, buf, len_read);
+         add_data_to_buffer(window, buf, len_read, window->current);
          window->current++;
          break;
    }
@@ -169,7 +177,7 @@ STATE send_data(Connection* client, uint8_t* packet, int32_t data_file, int32_t*
    return SEND_DATA;
 }
 
-STATE recv_acks(Connection *client, Window *window) {
+STATE recv_acks(Connection *client, Window *window, int32_t eof_seq) {
    int32_t recv_len;
    int32_t seq_num = 0;
    uint8_t flag;
@@ -187,10 +195,14 @@ STATE recv_acks(Connection *client, Window *window) {
       if(seq_num > window->bottom) {
          update_window(window, seq_num);
       }
+      if (seq_num == eof_seq) {
+         printf("in eof\n");
+         return FILE_END;
+      }
    }
-   if (flag == EOF_ACK) {
-      return DONE;
-   }
+    if (flag == EOF_ACK) {
+       return DONE;
+    }
    if (flag == SREJ) {
       printf("rejected\n");
       // printf("seq rejec: %d\n", seq_num);
@@ -228,4 +240,35 @@ STATE wait_for_data(Connection* client, Window* window) {
       return_val = WAIT_ON_DATA;
    }
    return return_val;
+}
+
+STATE file_end(Connection* client, Window *window) {
+   int retry_count = 0;
+   int return_val;
+   char *data;
+   char packet[MAX_LEN];
+   int32_t recv_len;
+   uint8_t flag = 0;
+   uint32_t seq_num = 0;
+
+   retry_count++;
+   send_buf(0, 0, client, END_OF_FILE, window->bottom, packet);
+
+   if (retry_count > MAX_TRIES) {
+      printf("Sent data %d times, no ACK, client is probably gone - I'm dead", MAX_TRIES);
+      return_val = DONE;
+   }
+
+   if (select_call(client->sk_num, SHORT_TIME, 0, NOT_NULL) == 1) {
+      recv_len = recv_buf(packet, MAX_LEN, client->sk_num, client, &flag, &seq_num);
+
+      if (recv_len == CRC_ERROR) {
+         return FILE_END;
+      }
+
+      if (flag == EOF_ACK) {
+         return DONE;
+      }
+   }
+   return FILE_END;   
 }
