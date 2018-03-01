@@ -191,7 +191,7 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 		//printf("window bottom %d\n", window->bottom);
 		add_data_to_buffer(window, data_buf, data_len, seq_num);
 		window->current = window->bottom;
-		//xsend_buf(0, 0, server, RR, window->bottom, packet);
+		send_buf(0, 0, server, RR, window->bottom, packet);
 		return SREJ_BLOCK;
 	}
 
@@ -242,7 +242,7 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
 		if (seq_num >= window->bottom && seq_num <= window->top) {
 			add_data_to_buffer(window, data_buf, data_len, seq_num);
 			//printf("window current: %d\n", window->current);	
-			for (i = window->bottom; i <= window->top; i++) {
+			for (i = window->bottom; i <= seq_num; i++) {
 				window->current = i;
 				if(check_if_valid(window, i) == 0) {
 					if (i != window->bottom && i != window->top && i) {

@@ -107,7 +107,7 @@ void update_window(Window *window, int seq_num) {
    int i;
 
    for (i = window->bottom; i < seq_num; i++) {
-      window->buff[i].valid = 0;
+      window->buff[(i-1)%window->size].valid = 0;
    }
    window->bottom = seq_num;
    window->top = seq_num + window->size - 1;

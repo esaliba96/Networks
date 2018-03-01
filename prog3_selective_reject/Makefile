@@ -36,7 +36,7 @@ ifeq ("$(OS)", "Darwin")
 	LIBNAME = $(shell ls *cpe464_$(FILE)*.a 2> .dev.null | tail -n 1)
 endif
 
-ALL = check_lib rcopy$(FILE) server$(FILE)
+ALL = check_lib rcopy server cleano
 
 all:  $(OBJS) $(ALL)
 
@@ -69,14 +69,14 @@ echo:
 	@echo "*** Building $@"
 	$(CC) -c $(CFLAGS) $< -o $@ $(LIBS1)
 
-rcopy$(FILE): rcopy.o  $(HFILES) $(OBJS)
+rcopy: rcopy.o  $(HFILES) $(OBJS)
 	@echo "-------------------------------"
 	@echo "*** Linking $@ with library: $(LIBNAME)... "
 	$(CC) $(CFLAGS) -o $@ rcopy.o $(OBJS) $(LIBNAME) $(LIBS)
 	@echo "*** Linking Complete!"
 	@echo "-------------------------------"
 
-server$(FILE): server.o $(HFILES) $(OBJS)
+server: server.o $(HFILES) $(OBJS)
 	@echo "-------------------------------"
 	@echo "*** Linking $@ with library: $(LIBNAME)... "
 	$(CC) $(CFLAGS) -o $@ server.o $(OBJS) $(LIBNAME) $(LIBS)

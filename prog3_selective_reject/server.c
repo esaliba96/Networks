@@ -219,14 +219,14 @@ STATE recv_acks(Connection *client, Window *window, int32_t eof_seq) {
 }
 
 STATE wait_for_data(Connection* client, Window* window) {
-   int retry_count = 0;
+   static int retry_count = 0;
    int return_val;
    char *data;
    char packet[MAX_LEN];
    int len;
 
    retry_count++;
-
+   printf("here with count %d\n", retry_count);
    if (retry_count > MAX_TRIES) {
       printf("Sent data %d times, no ACK, client is probably gone - I'm dead", MAX_TRIES);
       return_val = DONE;
