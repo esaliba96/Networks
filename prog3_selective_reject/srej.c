@@ -95,6 +95,7 @@ void init_window(Window *window, int size) {
    for (; i < size; i++) {
       memset(window->buff[i].payload, 0, MAX_LEN);
       window->buff[i].valid = 0;
+      window->buff[i].len = 0;
    }
 }
 
@@ -117,14 +118,16 @@ void add_data_to_buffer(Window* window, uint8_t* buf, int32_t data_len, int32_t 
   // printf("window size: %d\n", window->size);
   // printf("index: %d\n", index);
    memcpy(window->buff[index].payload, buf, data_len);
+   window->buff[index].len = data_len;
    window->buff[index].valid = 1;
    //printf("window buff: %s\n", window->buff[index].payload);
 }
 
-void get_data_from_buffer(Window* window, int seq, char** data) {
+void get_data_from_buffer(Window* window, int seq, char** data, int *len) {
    int index = (seq-1) % window->size;
    //printf("index where lost %s\n", window->buff[index].payload);
    *data = window->buff[index].payload;
+   *len = window->buff[index].len;
 }
 
 void remove_from_buffer(Window *window, int seq) {

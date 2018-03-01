@@ -19,6 +19,7 @@ typedef struct data Data;
 
 struct data {
    char payload[MAX_LEN];
+   int len;
    int valid;
 };
 
@@ -52,7 +53,7 @@ void init_window(Window *window, int size);
 int full(Window* window);
 void add_data_to_buffer(Window* window, uint8_t* buf, int32_t data_len, int32_t seq_num);
 void update_window(Window*, int);
-void get_data_from_buffer(Window* window, int seq, char** data);
+void get_data_from_buffer(Window* window, int seq, char** data, int *len);
 void remove_from_buffer(Window *window, int seq);
 int check_if_valid(Window *window, int seq);
 int all_invalid(Window *window);

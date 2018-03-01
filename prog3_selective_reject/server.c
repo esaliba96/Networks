@@ -183,6 +183,7 @@ STATE recv_acks(Connection *client, Window *window, int32_t eof_seq) {
    uint8_t flag;
    uint8_t packet[MAX_LEN];
    char* data;
+   int len;
 
    recv_len = recv_buf(packet, MAX_LEN, client->sk_num, client, &flag, &seq_num);
 
@@ -191,12 +192,12 @@ STATE recv_acks(Connection *client, Window *window, int32_t eof_seq) {
    }
 
    if(flag == RR) {
-      printf("recv rr for %d\n", seq_num);
+     // printf("recv rr for %d\n", seq_num);
       if(seq_num > window->bottom) {
          update_window(window, seq_num);
       }
       if (seq_num == eof_seq) {
-         printf("in eof\n");
+        // printf("in eof\n");
          return FILE_END;
       }
    }
@@ -204,14 +205,14 @@ STATE recv_acks(Connection *client, Window *window, int32_t eof_seq) {
        return DONE;
     }
    if (flag == SREJ) {
-      printf("rejected\n");
+     // printf("rejected\n");
       // printf("seq rejec: %d\n", seq_num);
       // printf("bottom %d\n", window->bottom);
       // printf("top %d\n", window->top);
       // printf("current %d\n", window->current);
-      get_data_from_buffer(window, seq_num, &data);
+      get_data_from_buffer(window, seq_num, &data, &len);
       printf("data srej: %s\n", data);
-      send_buf(data, strlen(data), client, DATA, seq_num, packet);
+      send_buf(data, len, client, DATA, seq_num, packet);
    }
 
    return SEND_DATA;
@@ -222,6 +223,7 @@ STATE wait_for_data(Connection* client, Window* window) {
    int return_val;
    char *data;
    char packet[MAX_LEN];
+   int len;
 
    retry_count++;
 
@@ -234,9 +236,9 @@ STATE wait_for_data(Connection* client, Window* window) {
       retry_count = 0;
       return_val = RECV_ACKS;
    } else {
-      get_data_from_buffer(window, window->bottom, &data);
-      send_buf(data, strlen(data), client, RESENT, window->bottom, packet);
-      printf("resending %s\n", data);
+      get_data_from_buffer(window, window->bottom, &data, &len);
+      send_buf(data, len, client, RESENT, window->bottom, packet);
+      //printf("resending %s\n", data);
       return_val = WAIT_ON_DATA;
    }
    return return_val;
