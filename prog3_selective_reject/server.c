@@ -4,7 +4,7 @@
 
 typedef enum state STATE;
 enum state {
-   START, DONE, FILENAME, SEND_DATA, WAIT_ON_DATA, FILE_END, RECV_ACKS, END_ACK, RESENT
+   START, DONE, FILENAME, SEND_DATA, WAIT_ON_DATA, FILE_END, RECV_ACKS, END_ACK, RESENT, OUT
 };
 
 void run_server(int port_number);
@@ -119,7 +119,9 @@ STATE filename(Connection* client, uint8_t* buf, int32_t recv_len, int32_t* data
    }
    
    recv_len = recv_buf(packet, MAX_LEN, client->sk_num, client, &flag, &seq_num);
-   
+   if (flag == CONNECT) {
+      printf("were fucked\n");
+   }
    if (recv_len == CRC_ERROR) {
       return START;
    }
@@ -164,7 +166,7 @@ STATE send_data(Connection* client, uint8_t* packet, int32_t data_file, int32_t*
          // printf("in eof\n");
          return WAIT_ON_DATA;
       default:
-         printf("sent buf \"%s\" at index %d\n", buf, window->current);
+         printf("index %d\n", window->current);
          send_buf(buf, len_read, client, DATA, window->current, packet);
          add_data_to_buffer(window, buf, len_read, window->current);
          window->current++;
@@ -191,30 +193,31 @@ STATE recv_acks(Connection *client, Window *window, int32_t eof_seq) {
       return WAIT_ON_DATA; 
    }
 
-   if(flag == RR) {
-     // printf("recv rr for %d\n", seq_num);
-      if(seq_num > window->bottom) {
-         update_window(window, seq_num);
-      }
-      if (seq_num == eof_seq) {
-        // printf("in eof\n");
-         return FILE_END;
-      }
+   switch(flag) {
+      case RR:
+         printf("here: %d\n", seq_num);
+         if(seq_num > window->bottom) {
+            printf("seq: %d\n", seq_num);
+            update_window(window, seq_num);
+         }
+         if (seq_num == eof_seq) {
+          printf("in eof\n");
+            return FILE_END;
+         }
+         break;
+      case EOF_ACK:
+         return DONE;
+         break;
+      case SREJ:
+         get_data_from_buffer(window, seq_num, &data, &len);
+         printf("data srej: %d\n", seq_num);
+         send_buf(data, len, client, DATA, seq_num, packet);
+         break;
+      default:
+         printf("ERROR - default flag in RECV\n");
+         exit(-1);
+         break;
    }
-    if (flag == EOF_ACK) {
-       return DONE;
-    }
-   if (flag == SREJ) {
-     // printf("rejected\n");
-      // printf("seq rejec: %d\n", seq_num);
-      // printf("bottom %d\n", window->bottom);
-      // printf("top %d\n", window->top);
-      // printf("current %d\n", window->current);
-      get_data_from_buffer(window, seq_num, &data, &len);
-      printf("data srej: %s\n", data);
-      send_buf(data, len, client, DATA, seq_num, packet);
-   }
-
    return SEND_DATA;
 }
 
@@ -245,32 +248,25 @@ STATE wait_for_data(Connection* client, Window* window) {
 }
 
 STATE file_end(Connection* client, Window *window) {
-   int retry_count = 0;
+   static int retry_count = 0;
    int return_val;
    char *data;
    char packet[MAX_LEN];
    int32_t recv_len;
    uint8_t flag = 0;
    uint32_t seq_num = 0;
+   STATE state = FILE_END;
 
-   retry_count++;
+   printf("sending\n");
    send_buf(0, 0, client, END_OF_FILE, window->bottom, packet);
+   if ((state = process_select(client, &retry_count, FILE_END, OUT, DONE)) == OUT) {
+         recv_len = recv_buf(packet, MAX_LEN, client->sk_num, client, &flag, &seq_num);
 
-   if (retry_count > MAX_TRIES) {
-      printf("Sent data %d times, no ACK, client is probably gone - I'm dead", MAX_TRIES);
-      return_val = DONE;
-   }
-
-   if (select_call(client->sk_num, SHORT_TIME, 0, NOT_NULL) == 1) {
-      recv_len = recv_buf(packet, MAX_LEN, client->sk_num, client, &flag, &seq_num);
-
-      if (recv_len == CRC_ERROR) {
-         return FILE_END;
+         if (recv_len == CRC_ERROR) {
+            state = FILE_END;
+         } else if (flag == EOF_ACK) {
+            state = DONE; 
+         }
       }
-
-      if (flag == EOF_ACK) {
-         return DONE;
-      }
-   }
-   return FILE_END;   
+   return state;
 }
