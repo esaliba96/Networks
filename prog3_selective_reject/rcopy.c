@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
 
 	remote_file = argv[2];
 
-	sendtoErr_init(atof(argv[5]), DROP_ON, FLIP_ON, DEBUG_OFF, RSEED_OFF);
+	sendtoErr_init(atof(argv[5]), DROP_ON, FLIP_ON, DEBUG_ON, RSEED_OFF);
 
 	run_client(argv[1], argv[2], atoi(argv[3]), atoi(argv[4]), argv[6], atoi(argv[7]));
 
@@ -84,6 +84,7 @@ void run_client(char* local_file, char* remote_file, int32_t window_size, int32_
 		}
 	}
 	close(out_fd);
+	close(server.sk_num);
 }
 
 STATE start_state(char* host, uint16_t port, Connection *server) {
@@ -157,6 +158,7 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 	int32_t data_len;
 	uint8_t data_buf[MAX_LEN];
 	uint8_t packet[MAX_LEN];
+	uint32_t rr[1];
 
 	if(select_call(server->sk_num, LONG_TIME, 0, NOT_NULL)  == 0) {
 		printf("Timeout after 10 seconds, server is dead!\n");
@@ -164,33 +166,29 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 	}
 
 	data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
-	// printf("data recv: %s with seq_num: %d\n", data_buf, seq_num);
-	// printf("window bottom: %d\n", window->bottom);
-
+	printf("seq num: %d\n", seq_num);
 	if (flag == END_OF_FILE) {
-			printf("recv eof\n");
-		  	send_buf(0, 0, server, EOF_ACK, seq_num + 1, packet);
-		  	return DONE;
+		send_buf(0, 0, server, EOF_ACK, seq_num + 1, packet);
+		return DONE;
 	}
+
 	if (data_len == CRC_ERROR) {
 		window->current = window->bottom;
 		send_buf(0, 0, server, SREJ, window->current, packet);
 		return SREJ_BLOCK;
 	}
-	//printf("window->bottom: %d window->current: %d seq_num: %d\n", window->bottom, window->current, seq_num);
 
 	if (seq_num < window->bottom) {
-		//printf("bottom: %d\n", window->bottom);
-		send_buf(0, 0, server, RR, window->bottom, packet);
+		rr[0] = htonl(window->bottom);
+		send_buf((uint8_t*)rr, 0, server, RR, window->bottom, packet);
 	} else if (seq_num == window->bottom) {
-		// printf("data len: %d\n", data_len);
-		 //printf("data: %s\n", data_buf);
 		update_window(window, window->bottom + 1);
-		send_buf(0, 0, server, RR, window->bottom, packet);
+		rr[0] = htonl(window->bottom);
+		send_buf((uint8_t*)rr, 4, server, RR, window->bottom, packet);
 		write(out_fd, data_buf, data_len);
 		//printf("data intital: %s\n", data_buf);
 	} else {
-		printf("window bottom %d\n", window->bottom);
+		//printf("window bottom %d\n", window->bottom);
 		add_data_to_buffer(window, data_buf, data_len, seq_num);
 		window->current = window->bottom;
 		//send_buf(0, 0, server, RR, window->bottom, packet);
@@ -201,75 +199,64 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 }
 
 STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
-	int retry_count = 0;
-   int return_val;
+	int return_val;
    int seq_num;
 	uint8_t flag;
 	int32_t data_len;
 	uint8_t data_buf[MAX_LEN];
 	char* data;
 	uint8_t packet[MAX_LEN];
-	int32_t i;
+	int32_t rejected;
 	STATE state = SREJ_BLOCK;
 	int len;
-//	int eof_seq;
+	int i, last_recv;
+	
+	if(select_call(server->sk_num, LONG_TIME, 0, NOT_NULL)  == 0) {
+		printf("Timeout after 10 seconds, server is dead!\n");
+		return DONE;
+	}
+   
+	data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
 
-   retry_count++;
+	if (data_len == CRC_ERROR) {
+		return SREJ_BLOCK;
+	}
 
-   // if (retry_count > MAX_TRIES) {
-   //    printf("Sent data %d times, no ACK, client is probably gone - I'm dead", MAX_TRIES);
-   //    return DONE;
-   // }
+	if (flag == END_OF_FILE) {
+		send_buf(0, 0, server, EOF_ACK, seq_num, packet);
+		return DONE;
+	}
 
-   //if (select_call(server->sk_num, SHORT_TIME, 0, NOT_NULL) == 1) {
-//      retry_count = 0;
+	add_data_to_buffer(window, data_buf, data_len, seq_num);
+	for (i = window->bottom; i<= window->top; i++) {
+		if(check_if_valid(window, i) == 0) {
+			rejected = i;
+			printf("rej: %d\n", rejected);
+			send_buf(0, 0, server, SREJ, i, packet);
+			break;
+		}
+	}
+	while(rejected != seq_num && seq_num <= window->top) {
+		last_recv = seq_num;
 		data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
-
 		if (data_len == CRC_ERROR) {
 			return SREJ_BLOCK;
 		}
-
-		if (flag == END_OF_FILE) {
-			send_buf(0, 0, server, EOF_ACK, seq_num, packet);
-			return DONE;
-		}
-
-		//printf("window->bottom: %d window->top: %d seq_num: %d\n", window->bottom, window->top, seq_num);
-		if (seq_num >= window->bottom && seq_num <= window->top) {
-			add_data_to_buffer(window, data_buf, data_len, seq_num);
-			//printf("window current: %d\n", window->current);	
-			for (i = window->bottom; i <= window->top; i++) {
-				window->current = i;
-				if(check_if_valid(window, i) == 0) {
-					//if (i != window->bottom && i != window->top && i) {
-						printf("rej: %d\n", i);
-						send_buf(0, 0, server, SREJ, i, packet);
-					//}
-					break;
-				}
-			}
-			write_to_out(window, window->bottom, window->current, out_fd);
-			//printf("sending rr for: %d\n", window->current);
-			send_buf(0, 0, server, RR, window->current+1, packet);
-
-			if (all_invalid(window)) {
-				update_window(window, window->current);
-				return RECV_DATA;
-			}
-
-			if(window->current > window->bottom) {
-				update_window(window, window->current);
-			}
+		add_data_to_buffer(window, data_buf, data_len, seq_num);
+	
+		printf("last_recv %d\n", last_recv);
+	}
+	for (i = rejected; i <= last_recv; i++) {
+		if(check_if_valid(window, i) == 0) {
+			window->bottom = i;
 			return SREJ_BLOCK;
 		}
-			printf("sending rr for: %d\n", window->current);
-
-		send_buf(0, 0, server, RR, window->current, packet);
-
-		return RECV_DATA;
-   //}
-//   printf("hereee\n");
-  // return SREJ_BLOCK;
+	}
+	update_window(window, last_recv + 1);
+	write_to_out(window, rejected, last_recv + 1, out_fd);
+	send_buf(0, 0, server, RR, last_recv + 1, packet);
+	printf("yee almos\n");	
+	return RECV_DATA;
 }
 
 void write_to_out(Window *window, int bottom, int current, int out_fd) {
@@ -278,9 +265,7 @@ void write_to_out(Window *window, int bottom, int current, int out_fd) {
 	int32_t len;
 
 	for (i = bottom; i < current; i++) {
-		//printf("i: %d\n", i);
 		get_data_from_buffer(window, i, &data, &len);
-		//printf("data here: %d\n", len);
 		remove_from_buffer(window, i);
 		write(out_fd, data, len);
 	}
