@@ -172,17 +172,15 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window, int32_t* seq
 
 	data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
 	//printf("seq num: %d\n", seq_num);
-
 	if (data_len == CRC_ERROR) {
-		rr[0] = htonl(window->bottom);
-		(*seq)++;
+		//rr[0] = htonl(window->bottom);
+		//(*seq)++;
 		window->current = window->bottom;
-		send_buf((uint8_t*)rr, 4, server, SREJ, *seq, packet);
+		//send_buf((uint8_t*)rr, 4, server, SREJ, *seq, packet);
 		return SREJ_BLOCK;
 	}
 
 	if (flag == END_OF_FILE) {
-		printf("seq num %d\n", seq_num);	
 		(*seq)++;
 		send_buf(0, 0, server, EOF_ACK, *seq, packet);
 		return DONE;
@@ -201,7 +199,6 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window, int32_t* seq
 		write(out_fd, data_buf, data_len);
 		//printf("data intital: %s\n", data_buf);
 	} else {
-		//printf("window bottom %d\n", window->bottom);
 		add_data_to_buffer(window, data_buf, data_len, seq_num);
 		window->current = window->bottom;
 		//send_buf(0, 0, server, RR, window->bottom, packet);
@@ -222,7 +219,8 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window, int32_t* s
 	int32_t rejected;
 	STATE state = SREJ_BLOCK;
 	int len;
-	int i, last_recv;
+	int i;
+	static last_recv = 0;
 	uint32_t rr[1];
 
 	if(select_call(server->sk_num, LONG_TIME, 0, NOT_NULL)  == 0) {
@@ -237,7 +235,6 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window, int32_t* s
 	}
 
 	if (flag == END_OF_FILE) {
-		printf("seq_num: %d\n", seq_num);
 		send_buf(0, 0, server, EOF_ACK, *seq, packet);
 		return DONE;
 	}
@@ -246,36 +243,36 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window, int32_t* s
 	for (i = window->bottom; i<= window->top; i++) {
 		if(check_if_valid(window, i) == 0) {
 			rejected = i;
-			printf("rej: %d\n", rejected);
 			rr[0] = htonl(rejected);
-			printf("rej %d\n", ntohl(rr[0]));
 			(*seq)++;
 			send_buf((uint8_t*)rr, 4, server, SREJ, *seq, packet);
-			break;
 		}
+		break;
 	}
-	while(rejected != seq_num && seq_num <= window->top) {
-		last_recv = seq_num;
+
+	while(rejected != seq_num) {
 		data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
-		if (data_len == CRC_ERROR) {
-			return SREJ_BLOCK;
+		if (data_len != CRC_ERROR && seq_num <= window->top) {
+			if (seq_num >= last_recv) {
+				last_recv = seq_num;			
+			}
+			add_data_to_buffer(window, data_buf, data_len, seq_num);
 		}
-		add_data_to_buffer(window, data_buf, data_len, seq_num);
-	
-		//printf("last_recv %d\n", last_recv);
 	}
+
 	for (i = rejected; i <= last_recv; i++) {
 		if(check_if_valid(window, i) == 0) {
 			window->bottom = i;
+			write_to_out(window, rejected, i, out_fd);
 			return SREJ_BLOCK;
 		}
 	}
+
 	update_window(window, last_recv + 1);
 	write_to_out(window, rejected, last_recv + 1, out_fd);
 	rr[0] = htonl(last_recv+1);
 	(*seq)++;
 	send_buf((uint8_t*)rr, 4, server, RR, *seq, packet);
-	//printf("yee almos\n");	
 	return RECV_DATA;
 }
 
@@ -285,6 +282,7 @@ void write_to_out(Window *window, int bottom, int current, int out_fd) {
 	int32_t len;
 
 	for (i = bottom; i < current; i++) {
+		printf("%d\n", i);
 		get_data_from_buffer(window, i, &data, &len);
 		remove_from_buffer(window, i);
 		write(out_fd, data, len);
