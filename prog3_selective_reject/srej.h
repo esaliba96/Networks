@@ -38,7 +38,7 @@ struct window {
 };
 
 enum FLAG {
-   FNAME = 7, DATA = 3, FNAME_OK, FNAME_BAD, RR = 5, SREJ = 6, END_OF_FILE, EOF_ACK, CONNECT = 1, ACCEPTED = 2, CRC_ERROR = -1 
+   FNAME = 7, DATA = 3, FNAME_OK, FNAME_BAD, RR = 5, SREJ = 6, END_OF_FILE = 8, EOF_ACK, CONNECT = 1, ACCEPTED = 2, CRC_ERROR = -1 
 };
 
 int32_t send_buf(uint8_t *buf, uint32_t len, Connection *connection, uint8_t flag, 

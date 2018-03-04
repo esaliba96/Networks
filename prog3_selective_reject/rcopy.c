@@ -10,11 +10,11 @@ enum state {
 
 void run_client(char* local_file, char* remote_file, int32_t window_size, int32_t buffer_size, char* host, int16_t port);
 void check_args(int argc, char** argv);
-STATE start_state(char* host, uint16_t port, Connection *server);
-STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* server);
+STATE start_state(char* host, uint16_t port, Connection *server, int32_t* seq);
+STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* server, int32_t* seq);
 STATE file_ok(int* out_file_fd, char* out_file_name);
-STATE recv_data(int32_t out_fd, Connection *server, Window* window);
-STATE srej_block(uint32_t out_fd, Connection *server, Window* window);
+STATE recv_data(int32_t out_fd, Connection *server, Window* window, int32_t* seq);
+STATE srej_block(uint32_t out_fd, Connection *server, Window* window, int32_t* seq);
 void write_to_out(Window *window, int bottom, int current, int out_fd);
 
 int main(int argc, char** argv) {
@@ -60,23 +60,25 @@ void run_client(char* local_file, char* remote_file, int32_t window_size, int32_
 	STATE state = START;
 	Window window;
 	init_window(&window, window_size);
+	static int32_t seq_num = 0;
 
 	while(state != DONE) {
 		switch(state) {
 			case START:
-				state = start_state(host, port, &server);
+				state = start_state(host, port, &server, &seq_num);
 				break;
 			case FILENAME:
-				state = filename(remote_file, buff_size, window_size, &server);
+				//printf("sequence: %d\n", seq_num);
+				state = filename(remote_file, buff_size, window_size, &server, &seq_num);
 				break;
 			case FILE_OK:
 				state = file_ok(&out_fd, local_file);
 				break;
 			case RECV_DATA:
-				state = recv_data(out_fd, &server, &window);
+				state = recv_data(out_fd, &server, &window, &seq_num);
 				break;
 			case SREJ_BLOCK:
-				state = srej_block(out_fd, &server, &window);
+				state = srej_block(out_fd, &server, &window, &seq_num);
 				break;
 			default:
 				printf("ERROR - default STATE\n");
@@ -87,7 +89,7 @@ void run_client(char* local_file, char* remote_file, int32_t window_size, int32_
 	close(server.sk_num);
 }
 
-STATE start_state(char* host, uint16_t port, Connection *server) {
+STATE start_state(char* host, uint16_t port, Connection *server, int32_t* seq) {
 	STATE state = START;
 	uint8_t packet[MAX_LEN];
 	uint8_t flag = 0;
@@ -101,7 +103,9 @@ STATE start_state(char* host, uint16_t port, Connection *server) {
 	if (udp_client_setup(host, port, server) < 0) {
 		state = DONE;
 	} else {
-		send_buf(0, 0, server, CONNECT, 0, packet);
+		(*seq)++;
+		send_buf(0, 0, server, CONNECT, *seq, packet);
+		//printf("seq here %d\n", *seq);
 		if ((state = process_select(server, &retry_count, START, FILENAME, DONE)) == FILENAME) {
 			recv_check = recv_buf(packet, MAX_LEN, server->sk_num, server, &flag, &seq_num);
 
@@ -115,7 +119,7 @@ STATE start_state(char* host, uint16_t port, Connection *server) {
 	return state;
 }
 
-STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* server) {
+STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* server, int32_t* seq) {
 	STATE state = FILENAME;
 	uint8_t packet[MAX_LEN];
 	uint8_t buf[MAX_LEN];
@@ -130,7 +134,8 @@ STATE filename(char* fname, int32_t buff_size, int32_t window_size, Connection* 
 	memcpy(buf + SIZE_OF_BUF_SIZE, &window_size, SIZE_OF_BUF_SIZE);
 	memcpy(buf + 2* SIZE_OF_BUF_SIZE, fname, fname_len);
 
-	send_buf(buf, fname_len + 2 * SIZE_OF_BUF_SIZE, server, FNAME, 0, packet);
+	(*seq)++;
+	send_buf(buf, fname_len + 2 * SIZE_OF_BUF_SIZE, server, FNAME, *seq, packet);
 	if ((state = process_select(server, &retry_count, FILENAME, FILE_OK, DONE)) == FILE_OK) {
 		recv_check = recv_buf(packet, MAX_LEN, server->sk_num, server, &flag, &seq_num);
 		if (recv_check == CRC_ERROR) {
@@ -152,7 +157,7 @@ STATE file_ok(int* out_file_fd, char* out_file_name) {
 	return RECV_DATA;
 }
 
-STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
+STATE recv_data(int32_t out_fd, Connection *server, Window* window, int32_t* seq) {
 	int32_t seq_num = 0;
 	uint8_t flag;
 	int32_t data_len;
@@ -166,25 +171,33 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 	}
 
 	data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
-	printf("seq num: %d\n", seq_num);
-	if (flag == END_OF_FILE) {
-		send_buf(0, 0, server, EOF_ACK, seq_num + 1, packet);
-		return DONE;
-	}
+	//printf("seq num: %d\n", seq_num);
 
 	if (data_len == CRC_ERROR) {
+		rr[0] = htonl(window->bottom);
+		(*seq)++;
 		window->current = window->bottom;
-		send_buf(0, 0, server, SREJ, window->current, packet);
+		send_buf((uint8_t*)rr, 4, server, SREJ, *seq, packet);
 		return SREJ_BLOCK;
+	}
+
+	if (flag == END_OF_FILE) {
+		printf("seq num %d\n", seq_num);	
+		(*seq)++;
+		send_buf(0, 0, server, EOF_ACK, *seq, packet);
+		return DONE;
 	}
 
 	if (seq_num < window->bottom) {
 		rr[0] = htonl(window->bottom);
-		send_buf((uint8_t*)rr, 0, server, RR, window->bottom, packet);
+		(*seq)++;
+		send_buf((uint8_t*)rr, 4, server, RR, window->bottom, packet);
 	} else if (seq_num == window->bottom) {
 		update_window(window, window->bottom + 1);
 		rr[0] = htonl(window->bottom);
-		send_buf((uint8_t*)rr, 4, server, RR, window->bottom, packet);
+		(*seq)++;
+		//printf("rr here in send %d\n", ntohl(rr[0]));
+		send_buf((uint8_t*)rr, 4, server, RR, *seq, packet);
 		write(out_fd, data_buf, data_len);
 		//printf("data intital: %s\n", data_buf);
 	} else {
@@ -198,7 +211,7 @@ STATE recv_data(int32_t out_fd, Connection *server, Window* window) {
 	return RECV_DATA;
 }
 
-STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
+STATE srej_block(uint32_t out_fd, Connection *server, Window* window, int32_t* seq) {
 	int return_val;
    int seq_num;
 	uint8_t flag;
@@ -210,7 +223,8 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
 	STATE state = SREJ_BLOCK;
 	int len;
 	int i, last_recv;
-	
+	uint32_t rr[1];
+
 	if(select_call(server->sk_num, LONG_TIME, 0, NOT_NULL)  == 0) {
 		printf("Timeout after 10 seconds, server is dead!\n");
 		return DONE;
@@ -223,7 +237,8 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
 	}
 
 	if (flag == END_OF_FILE) {
-		send_buf(0, 0, server, EOF_ACK, seq_num, packet);
+		printf("seq_num: %d\n", seq_num);
+		send_buf(0, 0, server, EOF_ACK, *seq, packet);
 		return DONE;
 	}
 
@@ -232,7 +247,10 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
 		if(check_if_valid(window, i) == 0) {
 			rejected = i;
 			printf("rej: %d\n", rejected);
-			send_buf(0, 0, server, SREJ, i, packet);
+			rr[0] = htonl(rejected);
+			printf("rej %d\n", ntohl(rr[0]));
+			(*seq)++;
+			send_buf((uint8_t*)rr, 4, server, SREJ, *seq, packet);
 			break;
 		}
 	}
@@ -244,7 +262,7 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
 		}
 		add_data_to_buffer(window, data_buf, data_len, seq_num);
 	
-		printf("last_recv %d\n", last_recv);
+		//printf("last_recv %d\n", last_recv);
 	}
 	for (i = rejected; i <= last_recv; i++) {
 		if(check_if_valid(window, i) == 0) {
@@ -254,8 +272,10 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window) {
 	}
 	update_window(window, last_recv + 1);
 	write_to_out(window, rejected, last_recv + 1, out_fd);
-	send_buf(0, 0, server, RR, last_recv + 1, packet);
-	printf("yee almos\n");	
+	rr[0] = htonl(last_recv+1);
+	(*seq)++;
+	send_buf((uint8_t*)rr, 4, server, RR, *seq, packet);
+	//printf("yee almos\n");	
 	return RECV_DATA;
 }
 
