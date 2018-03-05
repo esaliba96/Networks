@@ -242,6 +242,7 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window, int32_t* s
 	add_data_to_buffer(window, data_buf, data_len, seq_num);
 	for (i = window->bottom; i<= window->top; i++) {
 		if(check_if_valid(window, i) == 0) {
+			printf("i here%d\n", i);
 			rejected = i;
 			rr[0] = htonl(rejected);
 			(*seq)++;
@@ -251,7 +252,15 @@ STATE srej_block(uint32_t out_fd, Connection *server, Window* window, int32_t* s
 	}
 
 	while(rejected != seq_num) {
+		
+		if(select_call(server->sk_num, LONG_TIME, 0, NOT_NULL)  == 0) {
+		printf("Timeout after 10 seconds, server is dead!\n");
+		return DONE;
+		}
+
 		data_len = recv_buf(data_buf, MAX_LEN, server->sk_num, server, &flag, &seq_num);
+		printf("rejected : %d\n", rejected);
+		printf("seq num : %d\n", seq_num);
 		if (data_len != CRC_ERROR && seq_num <= window->top) {
 			if (seq_num >= last_recv) {
 				last_recv = seq_num;			
