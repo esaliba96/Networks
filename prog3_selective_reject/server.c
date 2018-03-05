@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	sendtoErr_init(atof(argv[1]), DROP_ON, FLIP_ON, DEBUG_ON, RSEED_OFF);
+	sendtoErr_init(atof(argv[1]), DROP_ON, FLIP_ON, DEBUG_OFF, RSEED_OFF);
 
 	if (argc == 3) {
 		port_number = atoi(argv[2]);
@@ -189,6 +189,10 @@ STATE recv_acks(Connection *client, Window *window, int32_t eof_seq) {
    int len;
    uint32_t rr = 0;
 
+   if(select_call(client->sk_num, SHORT_TIME, 0, NOT_NULL)  == 0) {
+      printf("Timeout after 10 seconds, server is dead!\n");
+      return WAIT_ON_DATA;
+   }
    recv_len = recv_buf(packet, MAX_LEN, client->sk_num, client, &flag, &seq_num);
    memcpy(&rr, packet, SIZE_OF_BUF_SIZE);
   
@@ -205,7 +209,7 @@ STATE recv_acks(Connection *client, Window *window, int32_t eof_seq) {
             update_window(window, rr);
          }
          if (rr == eof_seq) {
-          printf("in eof\n");
+          //printf("in eof\n");
             return FILE_END;
          }
          break;

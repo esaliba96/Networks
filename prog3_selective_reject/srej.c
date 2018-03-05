@@ -107,15 +107,15 @@ int full(Window* window) {
 void update_window(Window *window, int seq_num) {
    int i;
 
-   for (i = window->bottom; i < seq_num; i++) {
-      window->buff[(i-1)%window->size].valid = 0;
-   }
    window->bottom = seq_num;
    window->top = seq_num + window->size - 1;
+   for (i = window->bottom; i < seq_num; i++) {
+      window->buff[(i)%window->size].valid = 0;
+   }
 }
 
 void add_data_to_buffer(Window* window, uint8_t* buf, int32_t data_len, int32_t seq_num) {
-   int index = (seq_num-1) % window->size;
+   int index = (seq_num) % window->size;
   // printf("window size: %d\n", window->size);
   // printf("index: %d\n", index);
    memcpy(window->buff[index].payload, buf, data_len);
@@ -125,30 +125,25 @@ void add_data_to_buffer(Window* window, uint8_t* buf, int32_t data_len, int32_t 
 }
 
 void get_data_from_buffer(Window* window, int seq, char** data, int *len) {
-   int index = (seq-1) % window->size;
+   int index = (seq) % window->size;
    //printf("index where lost %s\n", window->buff[index].payload);
    *data = window->buff[index].payload;
    *len = window->buff[index].len;
 }
 
 void remove_from_buffer(Window *window, int seq) {
-   int index = (seq-1) % window->size;
+   int index = (seq) % window->size;
    window->buff[index].valid = 0;
 }
 
 int check_if_valid(Window *window, int seq) {
-   int index = (seq-1) % window->size;
+   int index = (seq) % window->size;
    return window->buff[index].valid;
 }
 
-int all_invalid(Window *window) {
+void all_invalid(Window *window) {
    int i;
-
    for (i = window->bottom; i <= window->top; i++) {
-      if(window->buff[(i-1)%window->size].valid == 1) {
-         return 0;
-      }
+        window->buff[i%window->size].valid = 0;     
    }
-
-   return 1;
 }

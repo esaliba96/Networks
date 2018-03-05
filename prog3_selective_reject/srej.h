@@ -56,6 +56,6 @@ void update_window(Window*, int);
 void get_data_from_buffer(Window* window, int seq, char** data, int *len);
 void remove_from_buffer(Window *window, int seq);
 int check_if_valid(Window *window, int seq);
-int all_invalid(Window *window);
+void all_invalid(Window *window);
 
 #endif
